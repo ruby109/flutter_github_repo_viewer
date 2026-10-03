@@ -12,7 +12,7 @@ A Flutter app for iOS and Android that searches GitHub repositories and keeps a 
 | State management | [hooks_riverpod](https://pub.dev/packages/hooks_riverpod) + [flutter_hooks](https://pub.dev/packages/flutter_hooks) |
 | Networking | [http](https://pub.dev/packages/http) |
 | Local persistence | [shared_preferences](https://pub.dev/packages/shared_preferences) |
-| Linting | [flutter_lints](https://pub.dev/packages/flutter_lints) |
+| Linting | [flutter_lints](https://pub.dev/packages/flutter_lints), [riverpod_lint](https://pub.dev/packages/riverpod_lint), strict analyzer modes |
 
 ## Requirements
 
