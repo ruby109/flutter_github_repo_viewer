@@ -1,0 +1,25 @@
+# Git hooks managed by lefthook (https://lefthook.dev).
+# Install once per clone: lefthook install
+
+pre-commit:
+  piped: true # format first, then analyze the formatted code
+  jobs:
+    - name: format
+      glob: "*.dart"
+      run: dart format {staged_files}
+      stage_fixed: true
+    - name: analyze
+      glob: "*.dart"
+      # `dart analyze` (not `flutter analyze`) runs analyzer plugins such as
+      # riverpod_lint; --fatal-infos keeps it as strict as `flutter analyze`.
+      run: dart analyze --fatal-infos
+
+commit-msg:
+  jobs:
+    - name: conventional-commits
+      run: scripts/check-commit-msg.sh {1}
+
+pre-push:
+  jobs:
+    - name: test
+      run: flutter test

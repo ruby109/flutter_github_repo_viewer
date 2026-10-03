@@ -28,6 +28,17 @@ flutter pub get
 flutter run            # pick a simulator/emulator, or pass -d <device-id>
 ```
 
+## Development Setup
+
+Git hooks that format, analyze and test your changes, and check commit messages, are managed by [lefthook](https://lefthook.dev):
+
+```sh
+brew install lefthook
+lefthook install
+```
+
+See [AGENTS.md](AGENTS.md) for exactly what each hook runs.
+
 ## Testing
 
 ```sh
