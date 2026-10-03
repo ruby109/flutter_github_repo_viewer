@@ -1,17 +1,39 @@
-# github_repo_viewer
+# GitHub Repo Viewer
 
-A new Flutter project.
+A Flutter app for iOS and Android that searches GitHub repositories and keeps a list of the ones you star.
+
+- **Search**: find public repositories through the GitHub REST API.
+- **Stars**: save repositories locally and browse them later, offline.
+
+## Tech Stack
+
+| Concern | Choice |
+|---|---|
+| State management | [hooks_riverpod](https://pub.dev/packages/hooks_riverpod) + [flutter_hooks](https://pub.dev/packages/flutter_hooks) |
+| Networking | [http](https://pub.dev/packages/http) |
+| Local persistence | [shared_preferences](https://pub.dev/packages/shared_preferences) |
+| Linting | [flutter_lints](https://pub.dev/packages/flutter_lints) |
+
+## Requirements
+
+- Flutter 3.47 (stable channel) with Dart 3.13
+- Xcode for the iOS simulator, Android Studio (or the Android SDK) for the Android emulator
 
 ## Getting Started
 
-This project is a starting point for a Flutter application.
+```sh
+git clone https://github.com/ruby109/flutter_github_repo_viewer.git
+cd flutter_github_repo_viewer
+flutter pub get
+flutter run            # pick a simulator/emulator, or pass -d <device-id>
+```
 
-A few resources to get you started if this is your first Flutter project:
+## Testing
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+```sh
+flutter test
+```
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Contributing
+
+Commit conventions and other rules for contributors (human or AI agent) are in [AGENTS.md](AGENTS.md).
