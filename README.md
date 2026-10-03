@@ -1,5 +1,7 @@
 # GitHub Repo Viewer
 
+[![CI](https://github.com/ruby109/flutter_github_repo_viewer/actions/workflows/ci.yml/badge.svg)](https://github.com/ruby109/flutter_github_repo_viewer/actions/workflows/ci.yml)
+
 A Flutter app for iOS and Android that searches GitHub repositories and keeps a list of the ones you star.
 
 - **Search**: find public repositories through the GitHub REST API.
@@ -44,6 +46,8 @@ See [AGENTS.md](AGENTS.md) for exactly what each hook runs.
 ```sh
 flutter test
 ```
+
+CI runs the same format, analyze and test checks on every push to `main` and on pull requests.
 
 ## Contributing
 
