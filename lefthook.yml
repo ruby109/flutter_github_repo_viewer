@@ -1,6 +1,9 @@
 # Git hooks managed by lefthook (https://lefthook.dev).
 # Install once per clone: lefthook install
 
+# Restores PATH for GUI git clients that start hooks without Flutter on it.
+rc: scripts/lefthook-rc.sh
+
 pre-commit:
   piped: true # format first, then analyze the formatted code
   jobs:

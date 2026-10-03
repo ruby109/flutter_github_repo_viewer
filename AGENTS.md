@@ -37,6 +37,8 @@ brew install lefthook   # or: npm i -g lefthook / go install github.com/evilmart
 lefthook install
 ```
 
+Hooks also work from GUI git clients such as Fork: `scripts/lefthook-rc.sh` (the `rc` in `lefthook.yml`) restores PATH from your login shell when `flutter` is missing. Make sure your shell startup files (`~/.zprofile` or `~/.zshrc`) put Flutter on PATH.
+
 ## Code Quality Checks
 
 All Dart code must be formatted with `dart format`, pass `dart analyze --fatal-infos` with no issues, and pass `flutter test`.
