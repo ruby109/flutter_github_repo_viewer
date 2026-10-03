@@ -54,3 +54,11 @@ Use `dart analyze`, not `flutter analyze`: only `dart analyze` runs analyzer plu
 | CI (push / PR) | `.github/workflows/ci.yml` | format check, analyze, test |
 
 Local hooks can be skipped with `--no-verify`; CI is the gate that must pass before merging.
+
+## Agent Skills
+
+Official Flutter and Dart agent skills are vendored for Claude Code (`.claude/skills/`) and other agents (`.agents/skills/`), pinned in `skills-lock.json`. Don't edit them by hand; update with:
+
+```sh
+npx skills update -p
+```

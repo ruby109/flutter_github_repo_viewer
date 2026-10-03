@@ -9,6 +9,10 @@ pre-commit:
   jobs:
     - name: format
       glob: "*.dart"
+      # Vendored agent skills (managed by `npx skills`) are left untouched.
+      exclude:
+        - ".agents/**"
+        - ".claude/skills/**"
       run: dart format {staged_files}
       stage_fixed: true
     - name: analyze
