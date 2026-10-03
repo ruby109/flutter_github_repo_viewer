@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:github_repo_viewer/ui/shell/app_tab.dart';
 import 'package:github_repo_viewer/ui/shell/home_shell.dart';
 
+import '../../helpers/golden_devices.dart';
+
 void main() {
   group('HomeShell', () {
     Future<void> pumpShell(WidgetTester tester) {
@@ -39,6 +41,30 @@ void main() {
 
       expect(navBar(tester).currentIndex, AppTab.search.index);
       expect(body(tester).index, AppTab.search.index);
+    });
+
+    group('golden', () {
+      for (final device in goldenDevices) {
+        for (final tab in AppTab.values) {
+          testGoldens('${tab.name} tab', device, (tester) async {
+            await tester.pumpWidget(
+              const MaterialApp(
+                debugShowCheckedModeBanner: false,
+                home: HomeShell(),
+              ),
+            );
+            await tester.tap(find.text(tab.label));
+            await tester.pumpAndSettle();
+
+            await expectLater(
+              find.byType(HomeShell),
+              matchesGoldenFile(
+                'goldens/home_shell_${tab.name}_${device.name}.png',
+              ),
+            );
+          });
+        }
+      }
     });
   });
 }
