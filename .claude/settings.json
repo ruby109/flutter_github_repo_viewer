@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/dart-post-edit.sh",
+            "statusMessage": "dart format + dart analyze"
+          }
+        ]
+      }
+    ]
+  }
+}
