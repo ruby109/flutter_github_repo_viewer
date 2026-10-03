@@ -1,0 +1,3 @@
+tags:
+  # Golden (snapshot) tests. Run on Linux CI only; see .github/workflows/golden.yml.
+  golden:
