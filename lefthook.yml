@@ -29,4 +29,5 @@ commit-msg:
 pre-push:
   jobs:
     - name: test
-      run: flutter test
+      # Golden tests only run on Linux CI (see .github/workflows/golden.yml).
+      run: flutter test --exclude-tags golden

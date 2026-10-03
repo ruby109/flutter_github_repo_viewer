@@ -44,10 +44,16 @@ See [AGENTS.md](AGENTS.md) for exactly what each hook runs.
 ## Testing
 
 ```sh
-flutter test
+flutter test --exclude-tags golden    # unit and widget tests
 ```
 
 CI runs the same format, analyze and test checks on every push to `main` and on pull requests.
+
+Golden (snapshot) tests render key screens at iPhone 17, iPhone SE, iPad and Android phone sizes. They run on Linux CI for every pull request; to regenerate the golden files after an intended UI change, push the branch and run:
+
+```sh
+scripts/update-goldens.sh
+```
 
 ## Contributing
 

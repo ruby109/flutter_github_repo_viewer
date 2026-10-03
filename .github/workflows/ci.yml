@@ -33,4 +33,5 @@ jobs:
         run: dart analyze --fatal-infos
 
       - name: Test
-        run: flutter test
+        # Golden tests run in golden.yml.
+        run: flutter test --exclude-tags golden
