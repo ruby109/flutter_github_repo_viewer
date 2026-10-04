@@ -44,12 +44,27 @@ final class ControlledPreferencesStore extends InMemorySharedPreferencesAsync {
   /// Reads wait for this to complete while set.
   Completer<void>? readGate;
 
+  /// How many writes have started, finished or not.
+  int get startedWrites => _writes.length;
+
   /// Stores the value of write [index], counting from 0, and completes it.
-  void completeWrite(int index) => _writes[index].complete();
+  Future<void> completeWrite(int index) async {
+    (await _started(index)).complete();
+  }
 
   /// Fails write [index], counting from 0, leaving the stored value as is.
-  void failWrite(int index) =>
-      _writes[index].completeError(Exception('disk full'));
+  Future<void> failWrite(int index) async {
+    (await _started(index)).completeError(Exception('disk full'));
+  }
+
+  /// Waits for write [index] to start; writes may start asynchronously.
+  Future<Completer<void>> _started(int index) async {
+    for (var i = 0; i < 100 && _writes.length <= index; i++) {
+      await Future<void>.delayed(Duration.zero);
+    }
+    if (_writes.length <= index) throw StateError('Write $index never started');
+    return _writes[index];
+  }
 
   @override
   Future<bool> setString(

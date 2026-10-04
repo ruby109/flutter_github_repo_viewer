@@ -73,16 +73,17 @@ class FavoritesNotifier extends Notifier<List<GitHubRepo>> {
   /// Saves started by [toggle] that haven't finished yet.
   int _pendingSaves = 0;
 
-  /// Whether a save failed since favorites were last restored from storage.
-  bool _saveFailed = false;
+  /// Completes when the last queued save has finished, successfully or not.
+  Future<void> _lastSave = Future.value();
 
   /// Stars [repo] if it isn't starred, otherwise unstars it.
   ///
   /// Updates [state] at once so every screen reflects the change, then saves
-  /// the whole list. If saving fails, rethrows so the UI can tell the user,
-  /// and restores what is actually stored once no other save is pending:
-  /// a later save also stores this change, so undoing only this change
-  /// could disagree with storage.
+  /// the whole list after any earlier save, so an older list never finishes
+  /// last. If saving fails, rethrows so the UI can tell the user, and shows
+  /// what is actually stored once no other save is pending: a later save
+  /// also stores this change, so undoing only this change could disagree
+  /// with storage.
   Future<void> toggle(GitHubRepo repo) async {
     final isStarred = state.any((favorite) => favorite.id == repo.id);
     state = isStarred
@@ -92,22 +93,23 @@ class FavoritesNotifier extends Notifier<List<GitHubRepo>> {
           ]
         : [repo, ...state];
 
+    final preferences = ref.read(sharedPreferencesProvider);
+    final json = jsonEncode(state);
+    final save = _lastSave.then((_) => preferences.setString(storageKey, json));
+    _lastSave = save.then((_) {}, onError: (Object _) {});
+
     _pendingSaves++;
+    var saved = false;
     try {
-      await ref
-          .read(sharedPreferencesProvider)
-          .setString(storageKey, jsonEncode(state));
-    } on Object {
-      _saveFailed = true;
-      rethrow;
+      await save;
+      saved = true;
     } finally {
       _pendingSaves--;
-      if (_pendingSaves == 0 && _saveFailed) await _restoreFromStorage();
+      if (!saved) await _restoreFromStorage();
     }
   }
 
   Future<void> _restoreFromStorage() async {
-    _saveFailed = false;
     if (!ref.mounted) return;
     final preferences = ref.read(sharedPreferencesProvider);
     try {
@@ -116,7 +118,8 @@ class FavoritesNotifier extends Notifier<List<GitHubRepo>> {
       // Keep the current favorites; the next successful save stores them.
       return;
     }
-    // A toggle started while reloading saves a newer list than was read.
+    // A pending save, or a toggle started while reloading, stores a newer
+    // list than was read.
     if (!ref.mounted || _pendingSaves > 0) return;
     state = _read(preferences);
   }

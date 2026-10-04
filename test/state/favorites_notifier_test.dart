@@ -38,6 +38,17 @@ void main() {
     Iterable<String> fullNames(List<GitHubRepo> repos) =>
         repos.map((repo) => repo.fullName);
 
+    /// A container over a store whose writes and reads the test controls.
+    Future<(ProviderContainer, ControlledPreferencesStore)> controlled([
+      Map<String, Object> data = const {},
+    ]) async {
+      final (preferences, store) = await controlledPreferences(data);
+      return (containerFor(preferences), store);
+    }
+
+    /// Lets pending microtasks and zero-delay timers run.
+    Future<void> settle() => Future<void>.delayed(Duration.zero);
+
     group('restore', () {
       test('starts empty when nothing is stored', () async {
         final container = await containerWith();
@@ -200,19 +211,35 @@ void main() {
 
         expect(restarted.read(favoritesProvider), isEmpty);
       });
+
+      // Each save writes the whole list. If two writes ran at once, the
+      // older list could finish last and overwrite the newer one.
+      test('saves one list at a time, in order', () async {
+        final (container, store) = await controlled();
+        final notifier = container.read(favoritesProvider.notifier);
+        final first = notifier.toggle(repoWithId(1));
+        final second = notifier.toggle(repoWithId(2));
+        await settle();
+
+        expect(store.startedWrites, 1);
+        await store.completeWrite(0);
+        await first;
+        await settle();
+        expect(store.startedWrites, 2);
+        await store.completeWrite(1);
+        await second;
+
+        expect(fullNames((await restart()).read(favoritesProvider)), [
+          'owner/r2',
+          'owner/r1',
+        ]);
+      });
     });
 
     // Saves write the whole list, so a later successful save also stores an
     // earlier failed change. After a failure the notifier therefore reloads
     // what is actually stored, once no other save is pending.
     group('when saving fails', () {
-      Future<(ProviderContainer, ControlledPreferencesStore)> controlled([
-        Map<String, Object> data = const {},
-      ]) async {
-        final (preferences, store) = await controlledPreferences(data);
-        return (containerFor(preferences), store);
-      }
-
       final stored = {
         FavoritesNotifier.storageKey: jsonEncode([repoWithId(1).toJson()]),
       };
@@ -227,7 +254,7 @@ void main() {
           'owner/r2',
           'owner/r1',
         ]);
-        store.failWrite(0);
+        await store.failWrite(0);
 
         await expectLater(saving, throwsException);
         expect(fullNames(container.read(favoritesProvider)), ['owner/r1']);
@@ -239,11 +266,11 @@ void main() {
         final first = notifier.toggle(repoWithId(1));
         final second = notifier.toggle(repoWithId(2));
 
-        store.failWrite(0);
-        store.completeWrite(1);
-
+        await store.failWrite(0);
         await expectLater(first, throwsException);
+        await store.completeWrite(1);
         await second;
+
         expect(fullNames(container.read(favoritesProvider)), [
           'owner/r2',
           'owner/r1',
@@ -260,7 +287,7 @@ void main() {
         final first = notifier.toggle(repoWithId(1));
         final second = notifier.toggle(repoWithId(2));
 
-        store.failWrite(0);
+        await store.failWrite(0);
         await expectLater(first, throwsException);
 
         expect(fullNames(container.read(favoritesProvider)), [
@@ -268,30 +295,10 @@ void main() {
           'owner/r1',
         ]);
 
-        store.failWrite(1);
+        await store.failWrite(1);
         await expectLater(second, throwsException);
 
         expect(container.read(favoritesProvider), isEmpty);
-      });
-
-      // Writes may finish out of order: here the older list is stored last,
-      // so the failed change is not in storage and must be undone.
-      test('restores after a failure once an earlier save finishes', () async {
-        final (container, store) = await controlled();
-        final notifier = container.read(favoritesProvider.notifier);
-        final first = notifier.toggle(repoWithId(1));
-        final second = expectLater(
-          notifier.toggle(repoWithId(2)),
-          throwsException,
-        );
-
-        store.failWrite(1);
-        await Future<void>.delayed(Duration.zero);
-        store.completeWrite(0);
-
-        await first;
-        await second;
-        expect(fullNames(container.read(favoritesProvider)), ['owner/r1']);
       });
 
       test('keeps a change made while restoring', () async {
@@ -303,11 +310,13 @@ void main() {
         );
         final reading = store.readGate = Completer<void>();
 
-        store.failWrite(0);
-        await Future<void>.delayed(Duration.zero);
+        await store.failWrite(0);
+        await settle();
         final starring = notifier.toggle(repoWithId(3));
         reading.complete();
-        store.completeWrite(1);
+        // Let the restore finish reading before the newer list is stored.
+        await settle();
+        await store.completeWrite(1);
 
         await failing;
         await starring;
@@ -326,9 +335,8 @@ void main() {
             .read(favoritesProvider.notifier)
             .toggle(repoWithId(2));
 
-        store
-          ..readError = Exception('storage unavailable')
-          ..failWrite(0);
+        store.readError = Exception('storage unavailable');
+        await store.failWrite(0);
 
         await expectLater(
           saving,

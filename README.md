@@ -105,7 +105,7 @@ All favorites are stored under one key, `favorites`, as a JSON array of the fiel
 
 - Entries use the GitHub API's own field names and are read back with `GitHubRepo.fromJson`, so the API and storage share one parser.
 - The list is ordered most recently starred first. The assignment doesn't specify an order. The array keeps the order, so no timestamp is stored.
-- Every change rewrites the whole array. shared_preferences can only replace a key's whole value, and one write always stores one complete list.
+- Every change rewrites the whole array. shared_preferences can only replace a key's whole value, and one write always stores one complete list. Saves run one at a time, in order, so an older list can never finish last and overwrite a newer one.
 - `main()` loads the preferences (`SharedPreferencesWithCache`, limited to the `favorites` key) before `runApp`, and injects them through `sharedPreferencesProvider`. From then on favorites are read synchronously, so no screen has a loading state for them.
 
 ### Keeping screens in sync
