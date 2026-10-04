@@ -33,17 +33,38 @@ class FavoritesNotifier extends Notifier<List<GitHubRepo>> {
 
   @override
   List<GitHubRepo> build() {
-    final stored = ref.watch(sharedPreferencesProvider).getString(storageKey);
-    if (stored == null) return const [];
+    final stored = ref.watch(sharedPreferencesProvider).get(storageKey);
+    return stored is String ? _decode(stored) : const [];
+  }
 
-    return switch (jsonDecode(stored)) {
-      final List<Object?> items => [
-        for (final item in items)
-          if (item case final Map<String, Object?> json)
-            GitHubRepo.fromJson(json),
-      ],
-      _ => const [],
-    };
+  /// Parses stored favorites, skipping anything unreadable: the data may be
+  /// corrupt or written by another app version, and losing favorites beats
+  /// crashing on launch. Unreadable data is replaced on the next change.
+  static List<GitHubRepo> _decode(String stored) {
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(stored);
+    } on FormatException {
+      return const [];
+    }
+    if (decoded is! List<Object?>) return const [];
+
+    final favorites = <GitHubRepo>[];
+    final seenIds = <int>{};
+    for (final item in decoded) {
+      final repo = _tryParse(item);
+      if (repo != null && seenIds.add(repo.id)) favorites.add(repo);
+    }
+    return favorites;
+  }
+
+  static GitHubRepo? _tryParse(Object? item) {
+    if (item is! Map<String, Object?>) return null;
+    try {
+      return GitHubRepo.fromJson(item);
+    } on FormatException {
+      return null;
+    }
   }
 
   /// Stars [repo] if it isn't starred, otherwise unstars it.

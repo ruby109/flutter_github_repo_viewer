@@ -60,6 +60,67 @@ void main() {
           'https://avatars.githubusercontent.com/u/2?v=4',
         );
       });
+
+      // Stored data can be corrupted or written by an older or newer app
+      // version; losing favorites beats crashing on launch.
+      group('starts empty when the stored value', () {
+        final unusableValues = <String, Object>{
+          'is not JSON': '[{"id": 1',
+          'is a JSON object': jsonEncode(repoJson()),
+          'is a JSON string': jsonEncode('owner/repo'),
+          'is not a string': 42,
+        };
+
+        unusableValues.forEach((description, value) {
+          test(description, () async {
+            final container = await containerWith({
+              FavoritesNotifier.storageKey: value,
+            });
+
+            expect(container.read(favoritesProvider), isEmpty);
+          });
+        });
+      });
+
+      test('skips invalid entries and keeps valid ones', () async {
+        final container = await containerWith({
+          FavoritesNotifier.storageKey: jsonEncode([
+            repoJson(id: 1, fullName: 'a/one'),
+            repoJson(id: 2)..remove('full_name'),
+            repoJson(id: 3)..['id'] = '3',
+            42,
+            null,
+            repoJson(id: 4, fullName: 'd/four'),
+          ]),
+        });
+
+        expect(fullNames(container.read(favoritesProvider)), [
+          'a/one',
+          'd/four',
+        ]);
+      });
+
+      test('drops duplicate ids, keeping the first', () async {
+        final container = await containerWith({
+          FavoritesNotifier.storageKey: jsonEncode([
+            repoJson(id: 1, fullName: 'a/new'),
+            repoJson(id: 1, fullName: 'a/old'),
+          ]),
+        });
+
+        expect(fullNames(container.read(favoritesProvider)), ['a/new']);
+      });
+
+      test('replaces unusable data on the next star', () async {
+        final container = await containerWith({
+          FavoritesNotifier.storageKey: 'not json',
+        });
+
+        await container.read(favoritesProvider.notifier).toggle(repoWithId(1));
+        final restarted = await restart();
+
+        expect(fullNames(restarted.read(favoritesProvider)), ['owner/r1']);
+      });
     });
 
     group('toggle', () {
