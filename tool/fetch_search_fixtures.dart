@@ -30,22 +30,31 @@ Future<void> main() async {
     final items = (search['items']! as List<Object?>)
         .cast<Map<String, Object?>>();
 
+    // Download everything before replacing anything, so a failed run
+    // leaves the previous fixtures intact.
+    final avatarBytes = <String, List<int>>{};
+    for (final item in items) {
+      // The Search API allows results without an owner; they keep their
+      // place in the JSON but have no avatar.
+      if (item['owner'] case {'avatar_url': final String avatarUrl}) {
+        final url = Uri.parse(avatarUrl);
+        final userId = url.pathSegments.last;
+        if (avatarBytes.containsKey(userId)) continue;
+        avatarBytes[userId] = await _getBytes(
+          client,
+          url.replace(
+            queryParameters: {...url.queryParameters, 's': '$_avatarSize'},
+          ),
+        );
+      }
+    }
+
     final avatars = Directory('${_fixtures.path}/avatars');
     if (avatars.existsSync()) avatars.deleteSync(recursive: true);
     avatars.createSync(recursive: true);
-    for (final item in items) {
-      final owner = item['owner']! as Map<String, Object?>;
-      final url = Uri.parse(owner['avatar_url']! as String);
-      final userId = url.pathSegments.last;
-      final bytes = await _getBytes(
-        client,
-        url.replace(
-          queryParameters: {...url.queryParameters, 's': '$_avatarSize'},
-        ),
-      );
+    avatarBytes.forEach((userId, bytes) {
       File('${avatars.path}/$userId').writeAsBytesSync(bytes);
-    }
-
+    });
     File('${_fixtures.path}/search_$_query.json').writeAsStringSync(
       '${const JsonEncoder.withIndent('  ').convert(search)}\n',
     );
