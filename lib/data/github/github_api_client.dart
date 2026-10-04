@@ -11,11 +11,20 @@ import 'search_page.dart';
 /// See https://docs.github.com/en/rest/search/search#search-repositories and
 /// https://docs.github.com/en/rest/repos/repos#get-a-repository.
 class GitHubApiClient {
-  /// [now] is the clock used to compute retry times; tests can fix it.
-  GitHubApiClient(this._http, {this._now = DateTime.now});
+  /// Requests that take longer than [timeout] fail with a
+  /// [NetworkException]. [now] is the clock used to compute retry times;
+  /// tests can fix it.
+  GitHubApiClient(
+    this._http, {
+    this._timeout = defaultTimeout,
+    this._now = DateTime.now,
+  });
 
   final http.Client _http;
+  final Duration _timeout;
   final DateTime Function() _now;
+
+  static const defaultTimeout = Duration(seconds: 15);
 
   /// Results requested per search page.
   static const perPage = 30;
@@ -60,7 +69,15 @@ class GitHubApiClient {
   }
 
   Future<Map<String, Object?>> _getJson(Uri url) async {
-    final response = await _http.get(url, headers: _headers);
+    final http.Response response;
+    // Any exception from the transport means the request didn't complete:
+    // ClientException (socket errors), TimeoutException, TLS errors, etc.
+    // Errors (bugs) still propagate.
+    try {
+      response = await _http.get(url, headers: _headers).timeout(_timeout);
+    } on Exception catch (error) {
+      throw NetworkException(error);
+    }
     if (_isRateLimited(response)) {
       throw RateLimitException(retryAt: _retryAt(response.headers));
     }

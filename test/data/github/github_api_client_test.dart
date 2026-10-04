@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -314,6 +316,59 @@ void main() {
           );
         });
       }
+    });
+
+    group('network errors', () {
+      test('throws NetworkException when the request fails', () async {
+        final cause = http.ClientException('Connection refused');
+        final client = GitHubApiClient(
+          MockClient((request) async => throw cause),
+        );
+
+        await expectLater(
+          client.searchRepositories('flutter'),
+          throwsA(
+            isA<NetworkException>().having((e) => e.cause, 'cause', cause),
+          ),
+        );
+      });
+
+      // http wraps socket errors in ClientException but lets TLS errors
+      // through, e.g. when a captive portal intercepts HTTPS.
+      test('throws NetworkException when the TLS handshake fails', () async {
+        final client = GitHubApiClient(
+          MockClient((request) async => throw const HandshakeException()),
+        );
+
+        await expectLater(
+          client.searchRepositories('flutter'),
+          throwsA(
+            isA<NetworkException>().having(
+              (e) => e.cause,
+              'cause',
+              isA<HandshakeException>(),
+            ),
+          ),
+        );
+      });
+
+      test('throws NetworkException when the request times out', () async {
+        final client = GitHubApiClient(
+          MockClient((request) => Completer<http.Response>().future),
+          timeout: const Duration(milliseconds: 10),
+        );
+
+        await expectLater(
+          client.fetchRepository('flutter/flutter'),
+          throwsA(
+            isA<NetworkException>().having(
+              (e) => e.cause,
+              'cause',
+              isA<TimeoutException>(),
+            ),
+          ),
+        );
+      });
     });
   });
 }

@@ -36,3 +36,16 @@ final class HttpStatusException extends GitHubApiException {
   @override
   String toString() => 'HttpStatusException($statusCode)';
 }
+
+/// The request didn't complete: no connection, a dropped connection or a
+/// timeout.
+final class NetworkException extends GitHubApiException {
+  const NetworkException(this.cause);
+
+  /// The underlying error, e.g. an `http.ClientException` or a
+  /// `TimeoutException`.
+  final Object cause;
+
+  @override
+  String toString() => 'NetworkException($cause)';
+}
