@@ -27,6 +27,16 @@ void main() {
       );
     }
 
+    /// Expects GitHub's REST API headers and no credentials.
+    void expectGitHubHeaders(http.Request request) {
+      expect(request.headers['Accept'], 'application/vnd.github+json');
+      expect(request.headers['X-GitHub-Api-Version'], '2022-11-28');
+      expect(
+        request.headers.keys.map((name) => name.toLowerCase()),
+        isNot(contains('authorization')),
+      );
+    }
+
     group('searchRepositories', () {
       test('requests the given page of the Search API', () async {
         final client = clientReturning(searchJson(totalCount: 0, items: []));
@@ -67,13 +77,7 @@ void main() {
 
         await client.searchRepositories('flutter');
 
-        final headers = requests.single.headers;
-        expect(headers['Accept'], 'application/vnd.github+json');
-        expect(headers['X-GitHub-Api-Version'], '2022-11-28');
-        expect(
-          headers.keys.map((name) => name.toLowerCase()),
-          isNot(contains('authorization')),
-        );
+        expectGitHubHeaders(requests.single);
       });
 
       test('returns the parsed page', () async {
@@ -105,6 +109,48 @@ void main() {
         );
         expect(requests, isEmpty);
       });
+    });
+
+    group('fetchRepository', () {
+      Map<String, Object?> detailJson() =>
+          repoJson(id: 7, fullName: 'flutter/flutter')
+            ..['subscribers_count'] = 3500;
+
+      test('requests the Repository API for full_name', () async {
+        final client = clientReturning(detailJson());
+
+        await client.fetchRepository('flutter/flutter');
+
+        final request = requests.single;
+        expect(request.method, 'GET');
+        expect(
+          request.url,
+          Uri.parse('https://api.github.com/repos/flutter/flutter'),
+        );
+        expectGitHubHeaders(request);
+      });
+
+      test('returns the parsed repository detail', () async {
+        final client = clientReturning(detailJson());
+
+        final detail = await client.fetchRepository('flutter/flutter');
+
+        expect(detail.repo.id, 7);
+        expect(detail.repo.fullName, 'flutter/flutter');
+        expect(detail.subscribersCount, 3500);
+      });
+
+      for (final fullName in ['flutter', 'flutter/', '/flutter', 'a/b/c']) {
+        test('rejects "$fullName" without a request', () async {
+          final client = clientReturning(detailJson());
+
+          await expectLater(
+            client.fetchRepository(fullName),
+            throwsArgumentError,
+          );
+          expect(requests, isEmpty);
+        });
+      }
     });
   });
 }
