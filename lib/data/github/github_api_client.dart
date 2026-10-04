@@ -101,7 +101,9 @@ class GitHubApiClient {
         throw HttpStatusException(statusCode);
     }
     try {
-      return switch (jsonDecode(response.body)) {
+      // JSON is always UTF-8; `response.body` would fall back to Latin-1
+      // when the content-type isn't application/json and has no charset.
+      return switch (jsonDecode(utf8.decode(response.bodyBytes))) {
         final Map<String, Object?> json => parse(json),
         final other => throw FormatException('Expected a JSON object', other),
       };

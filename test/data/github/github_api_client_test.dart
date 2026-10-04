@@ -438,5 +438,40 @@ void main() {
         expect(client.fetchRepository('owner/repo'), isMalformed);
       });
     });
+
+    // JSON is always UTF-8 (RFC 8259). package:http assumes that only for
+    // an application/json content-type; otherwise, e.g. when a proxy drops
+    // the header, it decodes without a charset as Latin-1.
+    group('response encoding', () {
+      GitHubApiClient clientReturningBytes(List<int> body) {
+        return GitHubApiClient(
+          MockClient((request) async => http.Response.bytes(body, 200)),
+        );
+      }
+
+      test('reads the body as UTF-8 without a content-type', () async {
+        final client = clientReturningBytes(
+          utf8.encode(
+            jsonEncode({
+              ...repoJson(fullName: 'owner/café'),
+              'subscribers_count': 1,
+            }),
+          ),
+        );
+
+        final detail = await client.fetchRepository('owner/repo');
+
+        expect(detail.repo.fullName, 'owner/café');
+      });
+
+      test('throws MalformedResponseException for invalid UTF-8', () {
+        final client = clientReturningBytes([0x7b, 0xff, 0x7d]);
+
+        expect(
+          client.fetchRepository('owner/repo'),
+          throwsA(isA<MalformedResponseException>()),
+        );
+      });
+    });
   });
 }
