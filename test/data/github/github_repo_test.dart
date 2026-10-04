@@ -39,6 +39,8 @@ void main() {
         'when id is not an int': (json) => json['id'] = '10270250',
         'when full_name is missing': (json) => json.remove('full_name'),
         'when full_name is null': (json) => json['full_name'] = null,
+        // owner is required but nullable, so only a missing key is invalid.
+        'when owner is missing': (json) => json.remove('owner'),
         'when owner is not an object': (json) => json['owner'] = 'facebook',
         'when owner.avatar_url is null': (json) =>
             (json['owner']! as Map<String, Object?>)['avatar_url'] = null,

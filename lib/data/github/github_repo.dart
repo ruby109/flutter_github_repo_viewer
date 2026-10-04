@@ -24,14 +24,21 @@ class GitHubRepo {
   /// Throws a [FormatException] if [json] isn't a valid repository object.
   factory GitHubRepo.fromJson(Map<String, Object?> json) {
     return switch (json) {
-      {'id': final int id, 'full_name': final String fullName} => GitHubRepo(
-        id: id,
-        fullName: fullName,
-        owner: switch (json['owner']) {
-          null => null,
-          final owner => Owner.fromJson(owner),
-        },
-      ),
+      // A map pattern requires each key to be present, so a missing owner
+      // fails here while a null one matches.
+      {
+        'id': final int id,
+        'full_name': final String fullName,
+        'owner': final Object? owner,
+      } =>
+        GitHubRepo(
+          id: id,
+          fullName: fullName,
+          owner: switch (owner) {
+            null => null,
+            final owner => Owner.fromJson(owner),
+          },
+        ),
       _ => throw FormatException('Invalid repository JSON', json),
     };
   }
