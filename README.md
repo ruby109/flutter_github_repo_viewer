@@ -148,7 +148,7 @@ All favorites are stored under one key, `favorites`, as a JSON array of the fiel
 - Entries use the GitHub API's own field names and are read back with `GitHubRepo.fromJson`, so the API and storage share one parser.
 - The list is ordered most recently starred first. The assignment doesn't specify an order. The array keeps the order, so no timestamp is stored.
 - Every change rewrites the whole array. shared_preferences can only replace a key's whole value, and one write always stores one complete list. Saves run one at a time, in order, so an older list can never finish last and overwrite a newer one.
-- `main()` loads the preferences (`SharedPreferencesWithCache`, limited to the `favorites` key) before `runApp`, and injects them through `sharedPreferencesProvider`. From then on favorites are read synchronously, so no screen has a loading state for them.
+- The preferences (`SharedPreferencesWithCache`, limited to the `favorites` key) are loaded once while the app starts, before any screen shows (see [App Startup](#app-startup)). From then on favorites are read synchronously through `sharedPreferencesProvider`, so no screen has a loading state for them.
 
 ### Keeping screens in sync
 
@@ -172,6 +172,27 @@ All favorites are stored under one key, `favorites`, as a JSON array of the fiel
 ### Testing favorites
 
 Tests replace the platform store with `InMemorySharedPreferencesAsync` from [shared_preferences_platform_interface](https://pub.dev/packages/shared_preferences_platform_interface). It is shared_preferences' own platform package and already a transitive dependency. It is listed as a dev dependency only so tests can import it, and it isn't part of the app. `test/helpers/preferences.dart` also has a store whose writes and reads a test can hold, fail or complete in any order, to cover concurrent saves.
+
+## App Startup
+
+`main()` calls `runApp` at once. `AppStartupWidget` (`lib/ui/startup/`) then loads the preferences through `sharedPreferencesLoaderProvider` and shows the app once they have loaded.
+
+| State | Shows |
+|---|---|
+| Loading | A plain white background, the same as the native launch screen, with no spinner, so a fast load looks like the launch screen staying a moment longer |
+| Failed | An error with a Retry button. Retry loads again; Riverpod's automatic retries are off, so a failing load doesn't keep the user waiting on a blank screen. |
+| Loaded | The app (`HomeShell`) |
+
+- **Why preferences load before the app shows.** Favorites are read from them. Loading them first means `sharedPreferencesProvider` reads synchronously (`requireValue` on the loaded value), so no screen needs a loading state for favorites and a star never flickers from empty to filled.
+- **Why not before `runApp`.** If loading throws (e.g. a corrupt preferences file or a platform channel error), `runApp` would never run and the app would stay on the native launch screen until the user killed it.
+- **Cost.** `SharedPreferencesWithCache.create` on a cold start (debug build, 5 runs each):
+
+  | Device | Min | Median | Max |
+  |---|---|---|---|
+  | iPhone SE simulator (iOS) | 15 ms | 38 ms | 51 ms |
+  | Android emulator (`Medium_Phone`) | 47 ms | 89 ms | 198 ms |
+
+  The app's first screen still waits this long, but behind the same white background as the launch screen. Profile-mode measurements on real devices can follow with the performance work in [#11](https://github.com/ruby109/flutter_github_repo_viewer/issues/11).
 
 ## Development Setup
 
