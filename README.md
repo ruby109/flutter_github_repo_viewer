@@ -14,6 +14,7 @@ A Flutter app for iOS and Android that searches GitHub repositories and keeps a 
 | State management | [hooks_riverpod](https://pub.dev/packages/hooks_riverpod) + [flutter_hooks](https://pub.dev/packages/flutter_hooks) |
 | Networking | [http](https://pub.dev/packages/http) |
 | Local persistence | [shared_preferences](https://pub.dev/packages/shared_preferences) |
+| Testing | [shared_preferences_platform_interface](https://pub.dev/packages/shared_preferences_platform_interface) (dev only, for its in-memory store; see [Favorites](#testing-favorites)) |
 | Linting | [flutter_lints](https://pub.dev/packages/flutter_lints), [riverpod_lint](https://pub.dev/packages/riverpod_lint), strict analyzer modes |
 
 ## Requirements
@@ -86,6 +87,49 @@ ProviderScope(
   child: const MyApp(),
 );
 ```
+
+## Favorites
+
+Starred repositories are stored on the device with `shared_preferences`. GitHub's own starring API isn't used, so no account is needed. The code is in `lib/state/favorites_notifier.dart`.
+
+### Storage
+
+All favorites are stored under one key, `favorites`, as a JSON array of the fields the app shows:
+
+```json
+[
+  {"id": 2, "full_name": "dart-lang/sdk", "owner": null},
+  {"id": 1, "full_name": "flutter/flutter", "owner": {"avatar_url": "https://avatars.githubusercontent.com/u/14101776?v=4"}}
+]
+```
+
+- Entries use the GitHub API's own field names and are read back with `GitHubRepo.fromJson`, so the API and storage share one parser.
+- The list is ordered most recently starred first. The assignment doesn't specify an order. The array keeps the order, so no timestamp is stored.
+- Every change rewrites the whole array. shared_preferences can only replace a key's whole value, and one write always stores one complete list. Saves run one at a time, in order, so an older list can never finish last and overwrite a newer one.
+- `main()` loads the preferences (`SharedPreferencesWithCache`, limited to the `favorites` key) before `runApp`, and injects them through `sharedPreferencesProvider`. From then on favorites are read synchronously, so no screen has a loading state for them.
+
+### Keeping screens in sync
+
+`favoritesProvider` (`FavoritesNotifier`) is the only owner of the starred list. Every screen reads from it and stars through `toggle(repo)`, which matches repositories by `id`. The change shows on every screen immediately, before it is saved.
+
+| Provider | Use |
+|---|---|
+| `favoritesProvider` | The starred list, for the Stars tab, and `toggle` |
+| `isStarredProvider(id)` | Whether one repository is starred, for a star icon |
+
+`isStarredProvider` is an `autoDispose` family over a set of starred ids:
+
+- **Narrow rebuilds.** It notifies only when that repository's star changes, so starring one row doesn't rebuild the others.
+- **Bounded memory.** It is disposed when a row scrolls away, so ids from long search results don't accumulate.
+
+### Corrupt data and failed saves
+
+- **Unreadable stored data** (not JSON, not an array, or the wrong type) loads as no favorites instead of crashing. Invalid entries and duplicate ids are skipped, and the valid entries are kept. The bad data is replaced on the next change.
+- **Failed saves.** If a save fails, `toggle` throws so the UI can tell the user. Once no other save is pending, the notifier reloads what is actually stored and shows that. It doesn't undo just the failed change, because a later save writes the whole list and may already contain it.
+
+### Testing favorites
+
+Tests replace the platform store with `InMemorySharedPreferencesAsync` from [shared_preferences_platform_interface](https://pub.dev/packages/shared_preferences_platform_interface). It is shared_preferences' own platform package and already a transitive dependency. It is listed as a dev dependency only so tests can import it, and it isn't part of the app. `test/helpers/preferences.dart` also has a store whose writes and reads a test can hold, fail or complete in any order, to cover concurrent saves.
 
 ## Development Setup
 

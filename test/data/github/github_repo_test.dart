@@ -32,6 +32,39 @@ void main() {
       expect(repo.owner, isNull);
     });
 
+    // Favorites are stored in this shape and read back with fromJson.
+    group('toJson', () {
+      test('writes id, full_name and owner.avatar_url', () {
+        const repo = GitHubRepo(
+          id: 1,
+          fullName: 'a/one',
+          owner: Owner(avatarUrl: 'https://example.com/a.png'),
+        );
+
+        expect(repo.toJson(), {
+          'id': 1,
+          'full_name': 'a/one',
+          'owner': {'avatar_url': 'https://example.com/a.png'},
+        });
+      });
+
+      test('writes a null owner', () {
+        const repo = GitHubRepo(id: 1, fullName: 'a/one', owner: null);
+
+        expect(repo.toJson(), {'id': 1, 'full_name': 'a/one', 'owner': null});
+      });
+
+      test('round-trips through fromJson', () {
+        final repo = GitHubRepo.fromJson(repoJson());
+
+        final restored = GitHubRepo.fromJson(repo.toJson());
+
+        expect(restored.id, repo.id);
+        expect(restored.fullName, repo.fullName);
+        expect(restored.owner?.avatarUrl, repo.owner?.avatarUrl);
+      });
+    });
+
     group('throws FormatException', () {
       final invalidCases = <String, void Function(Map<String, Object?>)>{
         'when id is missing': (json) => json.remove('id'),
