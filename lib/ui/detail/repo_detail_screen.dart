@@ -19,6 +19,9 @@ class RepoDetailScreen extends StatelessWidget {
 
   final GitHubRepo repo;
 
+  /// The widest the content gets, so it stays readable on tablets.
+  static const maxContentWidth = 560.0;
+
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
@@ -27,15 +30,24 @@ class RepoDetailScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
         children: [
-          Center(child: RepoAvatar(url: repo.owner?.avatarUrl, size: 96)),
-          const SizedBox(height: 16),
-          Text(
-            repo.fullName,
-            style: textTheme.headlineSmall,
-            textAlign: TextAlign.center,
+          Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: maxContentWidth),
+              child: Column(
+                children: [
+                  RepoAvatar(url: repo.owner?.avatarUrl, size: 96),
+                  const SizedBox(height: 16),
+                  Text(
+                    repo.fullName,
+                    style: textTheme.headlineSmall,
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 24),
+                  _Subscribers(fullName: repo.fullName),
+                ],
+              ),
+            ),
           ),
-          const SizedBox(height: 24),
-          _Subscribers(fullName: repo.fullName),
         ],
       ),
     );

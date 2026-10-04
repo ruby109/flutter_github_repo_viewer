@@ -157,6 +157,20 @@ void main() {
       });
     });
 
+    // e.g. on an iPad, where a full-width card reads poorly.
+    testWidgets('keeps its content readable on wide screens', (tester) async {
+      tester.view.physicalSize = const Size(1600, 1200);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await pumpScreen(tester, () async => found());
+      await tester.pump();
+
+      expect(
+        tester.getSize(find.byType(Card)).width,
+        lessThanOrEqualTo(RepoDetailScreen.maxContentWidth),
+      );
+    });
+
     testWidgets('fits a long name', (tester) async {
       await pumpScreen(
         tester,
