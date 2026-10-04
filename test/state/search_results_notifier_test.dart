@@ -8,6 +8,7 @@ import 'package:http/testing.dart';
 
 import 'package:github_repo_viewer/data/github/github_api_exception.dart';
 import 'package:github_repo_viewer/data/github/github_providers.dart';
+import 'package:github_repo_viewer/data/github/github_repo.dart';
 import 'package:github_repo_viewer/state/search_results_notifier.dart';
 
 import '../helpers/github_json.dart';
@@ -35,15 +36,14 @@ void main() {
 
     http.Response searchResponse({
       required int totalCount,
-      required List<String> fullNames,
+      required List<int> ids,
     }) {
       return http.Response(
         jsonEncode(
           searchJson(
             totalCount: totalCount,
             items: [
-              for (final (index, fullName) in fullNames.indexed)
-                repoJson(id: index + 1, fullName: fullName),
+              for (final id in ids) repoJson(id: id, fullName: 'owner/r$id'),
             ],
           ),
         ),
@@ -51,10 +51,15 @@ void main() {
       );
     }
 
+    http.Response rateLimited() => http.Response(
+      '{"message": "API rate limit exceeded"}',
+      403,
+      headers: {'x-ratelimit-remaining': '0'},
+    );
+
     test('loads the first page of results for the query', () async {
       final container = containerWith(
-        (_) async =>
-            searchResponse(totalCount: 2, fullNames: ['a/one', 'b/two']),
+        (_) async => searchResponse(totalCount: 2, ids: [1, 2]),
       );
 
       final results = await container.read(
@@ -63,7 +68,10 @@ void main() {
 
       expect(requests.single.url.queryParameters, containsPair('q', 'flutter'));
       expect(requests.single.url.queryParameters, containsPair('page', '1'));
-      expect(results.items.map((repo) => repo.fullName), ['a/one', 'b/two']);
+      expect(results.items.map((repo) => repo.fullName), [
+        'owner/r1',
+        'owner/r2',
+      ]);
       expect(results.totalCount, 2);
       expect(results.hasMore, isFalse);
     });
@@ -78,7 +86,7 @@ void main() {
 
       expect(subscription.read(), isA<AsyncLoading<SearchResults>>());
 
-      response.complete(searchResponse(totalCount: 1, fullNames: ['a/one']));
+      response.complete(searchResponse(totalCount: 1, ids: [1]));
       await container.read(searchResultsProvider('flutter').future);
 
       expect(subscription.read().value?.items, hasLength(1));
@@ -87,7 +95,7 @@ void main() {
     test('a new query starts loading without the previous results', () async {
       final container = containerWith(
         (request) async => request.url.queryParameters['q'] == 'first'
-            ? searchResponse(totalCount: 1, fullNames: ['a/one'])
+            ? searchResponse(totalCount: 1, ids: [1])
             : Completer<http.Response>().future,
       );
       container.listen(searchResultsProvider('first'), (_, _) {});
@@ -100,12 +108,6 @@ void main() {
     });
 
     group('when the request fails', () {
-      http.Response rateLimited() => http.Response(
-        '{"message": "API rate limit exceeded"}',
-        403,
-        headers: {'x-ratelimit-remaining': '0'},
-      );
-
       test('reports the API error', () async {
         final container = containerWith((_) async => rateLimited());
 
@@ -133,9 +135,8 @@ void main() {
       test('loads again when invalidated', () async {
         var fail = true;
         final container = containerWith(
-          (_) async => fail
-              ? rateLimited()
-              : searchResponse(totalCount: 1, fullNames: ['a/one']),
+          (_) async =>
+              fail ? rateLimited() : searchResponse(totalCount: 1, ids: [1]),
         );
         container.listen(searchResultsProvider('flutter'), (_, _) {});
         await container
@@ -149,13 +150,242 @@ void main() {
         );
 
         expect(requests, hasLength(2));
-        expect(results.items.map((repo) => repo.fullName), ['a/one']);
+        expect(results.items.map((repo) => repo.fullName), ['owner/r1']);
+      });
+    });
+
+    group('loadNextPage', () {
+      /// A container whose search for `flutter` answers page `n` with
+      /// `pages[n]`, already showing page 1.
+      ///
+      /// Pages hold 30 results, so a `total_count` of 60 leaves one more page
+      /// after the first.
+      Future<ProviderContainer> loadedWith(
+        Map<int, Future<http.Response> Function()> pages,
+      ) async {
+        final container = containerWith(
+          (request) =>
+              pages[int.parse(request.url.queryParameters['page']!)]!(),
+        );
+        container.listen(searchResultsProvider('flutter'), (_, _) {});
+        await container.read(searchResultsProvider('flutter').future);
+        return container;
+      }
+
+      SearchResults resultsIn(ProviderContainer container) =>
+          container.read(searchResultsProvider('flutter')).requireValue;
+
+      SearchResultsNotifier notifierIn(ProviderContainer container) =>
+          container.read(searchResultsProvider('flutter').notifier);
+
+      Iterable<int> idsIn(ProviderContainer container) =>
+          resultsIn(container).items.map((repo) => repo.id);
+
+      Future<http.Response> Function() respondWith(
+        int totalCount,
+        List<int> ids,
+      ) =>
+          () async => searchResponse(totalCount: totalCount, ids: ids);
+
+      test('appends the next page', () async {
+        final container = await loadedWith({
+          1: respondWith(60, [1, 2]),
+          2: respondWith(60, [3, 4]),
+        });
+
+        await notifierIn(container).loadNextPage();
+
+        expect(requests.last.url.queryParameters, containsPair('page', '2'));
+        expect(idsIn(container), [1, 2, 3, 4]);
+        expect(resultsIn(container).hasMore, isFalse);
+      });
+
+      test('is loading more until the page arrives', () async {
+        final page2 = Completer<http.Response>();
+        final container = await loadedWith({
+          1: respondWith(60, [1, 2]),
+          2: () => page2.future,
+        });
+
+        final loading = notifierIn(container).loadNextPage();
+
+        expect(resultsIn(container).isLoadingMore, isTrue);
+        expect(idsIn(container), [1, 2]);
+
+        page2.complete(searchResponse(totalCount: 60, ids: [3, 4]));
+        await loading;
+
+        expect(resultsIn(container).isLoadingMore, isFalse);
+      });
+
+      test('requests a page only once while it is loading', () async {
+        final page2 = Completer<http.Response>();
+        final container = await loadedWith({
+          1: respondWith(60, [1, 2]),
+          2: () => page2.future,
+        });
+
+        final first = notifierIn(container).loadNextPage();
+        final second = notifierIn(container).loadNextPage();
+        page2.complete(searchResponse(totalCount: 60, ids: [3, 4]));
+        await Future.wait<void>([first, second]);
+
+        expect(requests, hasLength(2));
+        expect(idsIn(container), [1, 2, 3, 4]);
+      });
+
+      test('does nothing when there are no more results', () async {
+        final container = await loadedWith({
+          1: respondWith(2, [1, 2]),
+        });
+
+        await notifierIn(container).loadNextPage();
+
+        expect(requests, hasLength(1));
+      });
+
+      test('does nothing while the first page is loading', () async {
+        final container = containerWith(
+          (_) => Completer<http.Response>().future,
+        );
+        container.listen(searchResultsProvider('flutter'), (_, _) {});
+
+        await notifierIn(container).loadNextPage();
+        await Future<void>.delayed(Duration.zero);
+
+        expect(requests.map((request) => request.url.queryParameters['page']), [
+          '1',
+        ]);
+      });
+
+      // The reload replaces the results, so a page of the old ones is stale.
+      test('does nothing while the search reloads', () async {
+        var reloaded = false;
+        final container = await loadedWith({
+          1: () => reloaded
+              ? Completer<http.Response>().future
+              : Future.value(searchResponse(totalCount: 60, ids: [1, 2])),
+          2: respondWith(60, [3, 4]),
+        });
+        reloaded = true;
+        container.invalidate(searchResultsProvider('flutter'));
+        container.read(searchResultsProvider('flutter'));
+
+        await notifierIn(container).loadNextPage();
+        await Future<void>.delayed(Duration.zero);
+
+        expect(requests.map((request) => request.url.queryParameters['page']), [
+          '1',
+          '1',
+        ]);
+      });
+
+      // Results can shift between pages while paging, so GitHub may return
+      // a repository again.
+      test('skips repositories already loaded', () async {
+        final container = await loadedWith({
+          1: respondWith(60, [1, 2, 3]),
+          2: respondWith(60, [3, 4, 5]),
+        });
+
+        await notifierIn(container).loadNextPage();
+
+        expect(idsIn(container), [1, 2, 3, 4, 5]);
+      });
+
+      group('when the page fails', () {
+        Future<ProviderContainer> failedOnPage2() async {
+          var page2Fails = true;
+          final container = await loadedWith({
+            1: respondWith(60, [1, 2]),
+            2: () async => page2Fails
+                ? rateLimited()
+                : searchResponse(totalCount: 60, ids: [3, 4]),
+          });
+          await notifierIn(container).loadNextPage();
+          page2Fails = false;
+          return container;
+        }
+
+        test('keeps the loaded results and reports the error', () async {
+          final container = await failedOnPage2();
+
+          final results = resultsIn(container);
+          expect(results.items.map((repo) => repo.id), [1, 2]);
+          expect(results.isLoadingMore, isFalse);
+          expect(results.loadMoreError, isA<RateLimitException>());
+        });
+
+        // Scrolling keeps asking for the next page; only the user retries.
+        test('does not request it again until retried', () async {
+          final container = await failedOnPage2();
+
+          await notifierIn(container).loadNextPage();
+
+          expect(requests, hasLength(2));
+        });
+
+        test('retryNextPage loads it and clears the error', () async {
+          final container = await failedOnPage2();
+
+          await notifierIn(container).retryNextPage();
+
+          expect(idsIn(container), [1, 2, 3, 4]);
+          expect(resultsIn(container).loadMoreError, isNull);
+        });
+      });
+
+      test('drops a page that arrives after the search reloaded', () async {
+        final page2 = Completer<http.Response>();
+        final container = await loadedWith({
+          1: respondWith(60, [1, 2]),
+          2: () => page2.future,
+        });
+        final loading = notifierIn(container).loadNextPage();
+
+        container.invalidate(searchResultsProvider('flutter'));
+        await container.read(searchResultsProvider('flutter').future);
+        page2.complete(searchResponse(totalCount: 60, ids: [3, 4]));
+        await loading;
+
+        expect(idsIn(container), [1, 2]);
+        expect(resultsIn(container).isLoadingMore, isFalse);
+      });
+    });
+
+    group('reachedSearchLimit', () {
+      SearchResults results({required int totalCount, required bool hasMore}) =>
+          SearchResults(
+            items: [GitHubRepo.fromJson(repoJson())],
+            totalCount: totalCount,
+            hasMore: hasMore,
+          );
+
+      test('is true when paging stopped with more matches left', () {
+        expect(
+          results(totalCount: 5000, hasMore: false).reachedSearchLimit,
+          isTrue,
+        );
+      });
+
+      test('is false while more pages can be loaded', () {
+        expect(
+          results(totalCount: 5000, hasMore: true).reachedSearchLimit,
+          isFalse,
+        );
+      });
+
+      test('is false when every match was loaded', () {
+        expect(
+          results(totalCount: 1000, hasMore: false).reachedSearchLimit,
+          isFalse,
+        );
       });
     });
 
     test('is disposed when no longer listened to', () async {
       final container = containerWith(
-        (_) async => searchResponse(totalCount: 1, fullNames: ['a/one']),
+        (_) async => searchResponse(totalCount: 1, ids: [1]),
       );
       final subscription = container.listen(
         searchResultsProvider('flutter'),
