@@ -30,6 +30,63 @@ flutter pub get
 flutter run            # pick a simulator/emulator, or pass -d <device-id>
 ```
 
+## GitHub API
+
+The app calls two public endpoints of the [GitHub REST API](https://docs.github.com/en/rest) through `GitHubApiClient` (`lib/data/github/`). Requests are unauthenticated, so there is no token to configure. Every request sends `Accept: application/vnd.github+json` and `X-GitHub-Api-Version: 2022-11-28` and times out after 15 seconds.
+
+### Search repositories
+
+[`GET /search/repositories`](https://docs.github.com/en/rest/search/search#search-repositories): `searchRepositories(query, page:)` returns a `SearchPage`.
+
+| Parameter | Value |
+|---|---|
+| `q` | The search box text. A blank query is rejected before sending, since GitHub answers it with 422; the screen shows its home state instead. |
+| `page` | 1 to 34. Pages past the 1000-result limit are rejected before sending. |
+| `per_page` | 30 |
+
+Fields used from each item (`GitHubRepo`):
+
+| JSON | Dart | Notes |
+|---|---|---|
+| `id` | `id` | Identifies a starred repository |
+| `full_name` | `fullName` | `owner/name` |
+| `owner.avatar_url` | `owner?.avatarUrl` | GitHub documents `owner` as nullable |
+
+`SearchPage.hasMore` controls infinite scrolling. It is false on the last page, on an empty page, and after 1000 results: the Search API returns at most 1000 results per query, however large `total_count` is, and later pages fail with 422.
+
+### Get a repository
+
+[`GET /repos/{owner}/{repo}`](https://docs.github.com/en/rest/repos/repos#get-a-repository): `fetchRepository(fullName)` returns a `RepoDetail`, which holds the same `GitHubRepo` fields plus `subscribers_count` (`subscribersCount`), a field search results don't include.
+
+### Errors
+
+Every failure is a subclass of the sealed `GitHubApiException`, so screens can `switch` over all of them:
+
+| Exception | When |
+|---|---|
+| `RateLimitException` | 429, or 403 with `retry-after`, `x-ratelimit-remaining: 0` or a rate limit message. `retryAt` comes from `retry-after` or `x-ratelimit-reset` when GitHub sends them. |
+| `NotFoundException` | 404, e.g. a repository deleted after it was listed |
+| `HttpStatusException` | Any other non-2xx status, including a 403 that isn't rate limiting |
+| `NetworkException` | No connection, a dropped connection, a TLS failure, or a timeout |
+| `MalformedResponseException` | A 2xx body that isn't JSON or lacks required fields |
+
+Unauthenticated clients get [10 searches a minute](https://docs.github.com/en/rest/search/search#rate-limit) and [60 other requests an hour](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api#primary-rate-limit-for-unauthenticated-users) per IP address, so rate limiting is an expected state, not an edge case.
+
+### Using the client and testing with it
+
+`gitHubApiClientProvider` provides the client, built on `httpClientProvider`, which closes the `http.Client` when its container is disposed. Tests override either provider instead of touching the network; the API tests use `MockClient` from `package:http/testing.dart`, which ships with `http`:
+
+```dart
+ProviderScope(
+  overrides: [
+    httpClientProvider.overrideWithValue(
+      MockClient((request) async => http.Response('{"total_count":0,"items":[]}', 200)),
+    ),
+  ],
+  child: const MyApp(),
+);
+```
+
 ## Development Setup
 
 Git hooks that format, analyze and test your changes, and check commit messages, are managed by [lefthook](https://lefthook.dev):
