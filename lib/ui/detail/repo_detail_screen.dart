@@ -107,7 +107,10 @@ class _Subscribers extends ConsumerWidget {
                 _formatCount(value.subscribersCount),
                 style: theme.textTheme.titleLarge,
               ),
-              Text('Subscribers', style: theme.textTheme.bodyLarge),
+              Text(
+                value.subscribersCount == 1 ? 'Subscriber' : 'Subscribers',
+                style: theme.textTheme.bodyLarge,
+              ),
             ],
           ),
           AsyncValue() => const SizedBox.shrink(),

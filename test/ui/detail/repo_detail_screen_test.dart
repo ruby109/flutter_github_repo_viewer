@@ -112,6 +112,14 @@ void main() {
       expect(tester.getSize(find.byType(Card)).width, loadingWidth);
     });
 
+    testWidgets('uses the singular for one subscriber', (tester) async {
+      await pumpScreen(tester, () async => found(subscribers: 1));
+      await tester.pump();
+
+      expect(find.text('Subscriber'), findsOneWidget);
+      expect(find.text('Subscribers'), findsNothing);
+    });
+
     group('formats the subscriber count', () {
       const cases = {0: '0', 999: '999', 1000: '1,000', 1234567: '1,234,567'};
 
