@@ -9,6 +9,11 @@ Future<SharedPreferencesWithCache> inMemoryPreferences([
 ]) {
   SharedPreferencesAsyncPlatform.instance =
       InMemorySharedPreferencesAsync.withData(data);
+  return reopenPreferences();
+}
+
+/// A fresh cache over the current in-memory store, as after an app restart.
+Future<SharedPreferencesWithCache> reopenPreferences() {
   return SharedPreferencesWithCache.create(
     cacheOptions: const SharedPreferencesWithCacheOptions(),
   );

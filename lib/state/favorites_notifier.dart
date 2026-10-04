@@ -31,4 +31,21 @@ class FavoritesNotifier extends Notifier<List<GitHubRepo>> {
       _ => const [],
     };
   }
+
+  /// Stars [repo] if it isn't starred, otherwise unstars it.
+  ///
+  /// Updates [state] at once so every screen reflects the change, then saves.
+  Future<void> toggle(GitHubRepo repo) {
+    final isStarred = state.any((favorite) => favorite.id == repo.id);
+    state = isStarred
+        ? [
+            for (final favorite in state)
+              if (favorite.id != repo.id) favorite,
+          ]
+        : [repo, ...state];
+
+    return ref
+        .read(sharedPreferencesProvider)
+        .setString(storageKey, jsonEncode(state));
+  }
 }
