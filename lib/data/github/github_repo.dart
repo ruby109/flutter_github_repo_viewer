@@ -2,8 +2,12 @@
 class Owner {
   const Owner({required this.avatarUrl});
 
-  factory Owner.fromJson(Map<String, Object?> json) {
-    return Owner(avatarUrl: json['avatar_url'] as String);
+  /// Throws a [FormatException] if [json] isn't a valid owner object.
+  factory Owner.fromJson(Object? json) {
+    return switch (json) {
+      {'avatar_url': final String avatarUrl} => Owner(avatarUrl: avatarUrl),
+      _ => throw FormatException('Invalid owner JSON', json),
+    };
   }
 
   final String avatarUrl;
@@ -17,12 +21,19 @@ class GitHubRepo {
     required this.owner,
   });
 
+  /// Throws a [FormatException] if [json] isn't a valid repository object.
   factory GitHubRepo.fromJson(Map<String, Object?> json) {
-    return GitHubRepo(
-      id: json['id'] as int,
-      fullName: json['full_name'] as String,
-      owner: Owner.fromJson(json['owner'] as Map<String, Object?>),
-    );
+    return switch (json) {
+      {'id': final int id, 'full_name': final String fullName} => GitHubRepo(
+        id: id,
+        fullName: fullName,
+        owner: switch (json['owner']) {
+          null => null,
+          final owner => Owner.fromJson(owner),
+        },
+      ),
+      _ => throw FormatException('Invalid repository JSON', json),
+    };
   }
 
   final int id;
@@ -30,5 +41,6 @@ class GitHubRepo {
   /// `owner/name`, e.g. `flutter/flutter`.
   final String fullName;
 
-  final Owner owner;
+  /// Null when GitHub returns no owner, which the Search API allows.
+  final Owner? owner;
 }
