@@ -38,6 +38,8 @@ class SearchResultsView extends ConsumerWidget {
       AsyncValue(:final value?) => SearchResultsList(
         results: value,
         onRepoTap: onRepoTap,
+        onLoadMore: () => ref.read(provider.notifier).loadNextPage(),
+        onRetryLoadMore: () => ref.read(provider.notifier).retryNextPage(),
       ),
       AsyncValue() => const SizedBox.shrink(),
     };

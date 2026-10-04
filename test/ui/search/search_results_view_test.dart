@@ -23,7 +23,7 @@ void main() {
     /// [respond].
     Future<void> pumpView(
       WidgetTester tester,
-      Future<http.Response> Function() respond,
+      Future<http.Response> Function(http.Request request) respond,
     ) async {
       requestCount = 0;
       final preferences = await inMemoryPreferences();
@@ -32,9 +32,9 @@ void main() {
           overrides: [
             sharedPreferencesProvider.overrideWithValue(preferences),
             httpClientProvider.overrideWithValue(
-              MockClient((_) {
+              MockClient((request) {
                 requestCount++;
-                return respond();
+                return respond(request);
               }),
             ),
           ],
@@ -47,18 +47,19 @@ void main() {
       );
     }
 
-    http.Response found(int count) => http.Response(
-      jsonEncode(
-        searchJson(
-          totalCount: count,
-          items: [
-            for (var id = 1; id <= count; id++)
-              repoJson(id: id, fullName: 'owner/r$id'),
-          ],
-        ),
-      ),
-      200,
-    );
+    http.Response found(int count, {int? totalCount, int firstId = 1}) =>
+        http.Response(
+          jsonEncode(
+            searchJson(
+              totalCount: totalCount ?? count,
+              items: [
+                for (var id = firstId; id < firstId + count; id++)
+                  repoJson(id: id, fullName: 'owner/r$id'),
+              ],
+            ),
+          ),
+          200,
+        );
 
     http.Response rateLimited() => http.Response(
       '{"message": "API rate limit exceeded"}',
@@ -70,7 +71,7 @@ void main() {
 
     testWidgets('shows a loading indicator while searching', (tester) async {
       final response = Completer<http.Response>();
-      await pumpView(tester, () => response.future);
+      await pumpView(tester, (_) => response.future);
 
       expect(spinner, findsOneWidget);
 
@@ -81,7 +82,7 @@ void main() {
     });
 
     testWidgets('lists the results', (tester) async {
-      await pumpView(tester, () async => found(2));
+      await pumpView(tester, (_) async => found(2));
       await tester.pump();
 
       expect(find.byType(SearchResultsList), findsOneWidget);
@@ -89,7 +90,7 @@ void main() {
     });
 
     testWidgets('says when nothing matches', (tester) async {
-      await pumpView(tester, () async => found(0));
+      await pumpView(tester, (_) async => found(0));
       await tester.pump();
 
       expect(find.text('No results'), findsOneWidget);
@@ -99,7 +100,7 @@ void main() {
 
     group('when the search fails', () {
       testWidgets('describes the error', (tester) async {
-        await pumpView(tester, () async => rateLimited());
+        await pumpView(tester, (_) async => rateLimited());
         await tester.pump();
 
         expect(find.text('Too many requests'), findsOneWidget);
@@ -111,7 +112,7 @@ void main() {
         final retried = Completer<http.Response>();
         await pumpView(
           tester,
-          () => fail ? Future.value(rateLimited()) : retried.future,
+          (_) => fail ? Future.value(rateLimited()) : retried.future,
         );
         await tester.pump();
         fail = false;
@@ -129,6 +130,49 @@ void main() {
 
         expect(find.text('owner/r1'), findsOneWidget);
       });
+    });
+
+    testWidgets('loads the next page when scrolled near the end', (
+      tester,
+    ) async {
+      await pumpView(
+        tester,
+        (request) async => request.url.queryParameters['page'] == '1'
+            ? found(30, totalCount: 60)
+            : found(30, totalCount: 60, firstId: 31),
+      );
+      await tester.pump();
+
+      expect(requestCount, 1);
+
+      await tester.scrollUntilVisible(find.text('owner/r30'), 500);
+      await tester.pump();
+      await tester.pump();
+
+      expect(requestCount, 2);
+      await tester.scrollUntilVisible(find.text('owner/r60'), 500);
+      expect(find.text('owner/r60'), findsOneWidget);
+    });
+
+    testWidgets('retries a page that failed to load', (tester) async {
+      var page2Fails = true;
+      await pumpView(tester, (request) async {
+        if (request.url.queryParameters['page'] == '1') {
+          return found(3, totalCount: 60);
+        }
+        return page2Fails
+            ? rateLimited()
+            : found(3, totalCount: 60, firstId: 31);
+      });
+      await tester.pump();
+      await tester.pump();
+      page2Fails = false;
+
+      await tester.tap(find.text('Retry'));
+      await tester.pump();
+
+      expect(requestCount, 3);
+      expect(find.text('owner/r31'), findsOneWidget);
     });
   });
 }
