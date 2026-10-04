@@ -370,5 +370,48 @@ void main() {
         );
       });
     });
+
+    group('malformed responses', () {
+      GitHubApiClient clientReturningRaw(String body) {
+        return GitHubApiClient(
+          MockClient((request) async => http.Response(body, 200)),
+        );
+      }
+
+      final isMalformed = throwsA(
+        isA<MalformedResponseException>().having(
+          (e) => e.cause,
+          'cause',
+          isA<FormatException>(),
+        ),
+      );
+
+      // e.g. an HTML error page from a proxy or captive portal.
+      test('throws MalformedResponseException when the body is not JSON', () {
+        final client = clientReturningRaw('<html>Sign in to Wi-Fi</html>');
+
+        expect(client.searchRepositories('flutter'), isMalformed);
+      });
+
+      test('throws MalformedResponseException when the body is not an '
+          'object', () {
+        final client = clientReturningRaw('[]');
+
+        expect(client.fetchRepository('flutter/flutter'), isMalformed);
+      });
+
+      test('throws MalformedResponseException for an invalid search '
+          'response', () {
+        final client = clientReturning({'total_count': 1});
+
+        expect(client.searchRepositories('flutter'), isMalformed);
+      });
+
+      test('throws MalformedResponseException for an invalid repository', () {
+        final client = clientReturning(repoJson());
+
+        expect(client.fetchRepository('owner/repo'), isMalformed);
+      });
+    });
   });
 }

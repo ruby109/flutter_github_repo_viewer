@@ -44,14 +44,14 @@ class GitHubApiClient {
     if (query.trim().isEmpty) {
       throw ArgumentError.value(query, 'query', 'must not be blank');
     }
-    final json = await _getJson(
+    return _get(
       Uri.https(_host, '/search/repositories', {
         'q': query,
         'page': '$page',
         'per_page': '$perPage',
       }),
+      (json) => SearchPage.fromJson(json, page: page, perPage: perPage),
     );
-    return SearchPage.fromJson(json, page: page, perPage: perPage);
   }
 
   /// Fetches the repository named [fullName] (`owner/name`).
@@ -62,13 +62,18 @@ class GitHubApiClient {
     if (segments.length != 2 || segments.any((segment) => segment.isEmpty)) {
       throw ArgumentError.value(fullName, 'fullName', 'must be "owner/name"');
     }
-    final json = await _getJson(
+    return _get(
       Uri(scheme: 'https', host: _host, pathSegments: ['repos', ...segments]),
+      RepoDetail.fromJson,
     );
-    return RepoDetail.fromJson(json);
   }
 
-  Future<Map<String, Object?>> _getJson(Uri url) async {
+  /// GETs [url] and parses its JSON object body with [parse], translating
+  /// every failure into a [GitHubApiException].
+  Future<T> _get<T>(
+    Uri url,
+    T Function(Map<String, Object?> json) parse,
+  ) async {
     final http.Response response;
     // Any exception from the transport means the request didn't complete:
     // ClientException (socket errors), TimeoutException, TLS errors, etc.
@@ -89,7 +94,14 @@ class GitHubApiClient {
       case final statusCode:
         throw HttpStatusException(statusCode);
     }
-    return jsonDecode(response.body) as Map<String, Object?>;
+    try {
+      return switch (jsonDecode(response.body)) {
+        final Map<String, Object?> json => parse(json),
+        final other => throw FormatException('Expected a JSON object', other),
+      };
+    } on FormatException catch (error) {
+      throw MalformedResponseException(error);
+    }
   }
 
   // https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api#exceeding-the-rate-limit

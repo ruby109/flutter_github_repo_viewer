@@ -49,3 +49,15 @@ final class NetworkException extends GitHubApiException {
   @override
   String toString() => 'NetworkException($cause)';
 }
+
+/// GitHub answered with a body the app can't read, e.g. not JSON or missing
+/// required fields.
+final class MalformedResponseException extends GitHubApiException {
+  const MalformedResponseException(this.cause);
+
+  /// The [FormatException] describing what was wrong.
+  final FormatException cause;
+
+  @override
+  String toString() => 'MalformedResponseException($cause)';
+}
