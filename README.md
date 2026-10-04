@@ -179,7 +179,7 @@ Tests replace the platform store with `InMemorySharedPreferencesAsync` from [sha
 
 | State | Shows |
 |---|---|
-| Loading | A plain white background, the same as the native launch screen, with no spinner, so a fast load looks like the launch screen staying a moment longer |
+| Loading | A plain white background, the same as the native launch screen, with no spinner, so a fast load looks like the launch screen staying a moment longer. The app has no dark theme, so the Android launch screen stays white in dark mode too (`values-night/styles.xml`), as the iOS one already does. |
 | Failed | An error with a Retry button. Retry loads again; Riverpod's automatic retries are off, so a failing load doesn't keep the user waiting on a blank screen. |
 | Loaded | The app (`HomeShell`) |
 

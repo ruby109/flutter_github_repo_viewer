@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -28,6 +29,61 @@ void main() {
           widget is ColoredBox &&
           widget.color == AppStartupWidget.launchBackground,
     );
+
+    // The loading background only hides the load if it continues the native
+    // launch screen, in light and dark mode alike.
+    group('launchBackground', () {
+      test('is white', () {
+        expect(AppStartupWidget.launchBackground, const Color(0xFFFFFFFF));
+      });
+
+      test('matches the iOS launch screen', () {
+        final storyboard = File('ios/Runner/Base.lproj/LaunchScreen.storyboard')
+            .readAsStringSync();
+
+        expect(
+          storyboard,
+          contains(
+            '<color key="backgroundColor" red="1" green="1" blue="1" '
+            'alpha="1"',
+          ),
+        );
+      });
+
+      test('matches the Android launch screen in light and dark mode', () {
+        final res = Directory('android/app/src/main/res');
+        // Both drawables are white under a light theme: one names white,
+        // the other uses the theme's ?android:colorBackground.
+        expect(
+          File('${res.path}/drawable/launch_background.xml').readAsStringSync(),
+          contains('@android:color/white'),
+        );
+        expect(
+          File('${res.path}/drawable-v21/launch_background.xml')
+              .readAsStringSync(),
+          contains('?android:colorBackground'),
+        );
+
+        // A values-night theme with a dark parent would make the launch
+        // screen black in dark mode; the app has no dark theme.
+        final styles = [
+          for (final dir in res.listSync().whereType<Directory>())
+            if (dir.path.split('/').last.startsWith('values'))
+              File('${dir.path}/styles.xml'),
+        ].where((file) => file.existsSync());
+        expect(styles, isNotEmpty);
+        for (final file in styles) {
+          final parents = RegExp(
+            r'<style name="(?:Launch|Normal)Theme" parent="([^"]+)"',
+          ).allMatches(file.readAsStringSync()).map((m) => m.group(1));
+          expect(
+            parents,
+            everyElement('@android:style/Theme.Light.NoTitleBar'),
+            reason: file.path,
+          );
+        }
+      });
+    });
 
     testWidgets('shows a plain launch background while loading', (
       tester,
