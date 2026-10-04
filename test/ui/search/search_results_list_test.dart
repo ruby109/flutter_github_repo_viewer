@@ -224,18 +224,38 @@ void main() {
         expect(find.text(SearchResultsList.searchLimitMessage), findsOneWidget);
       });
 
-      testWidgets('shows nothing once every result is loaded', (tester) async {
+      testWidgets('says when every result has been shown', (tester) async {
         await pumpList(tester);
 
+        expect(
+          find.text(SearchResultsList.endOfResultsMessage),
+          findsOneWidget,
+        );
         expect(spinner, findsNothing);
         expect(find.text(SearchResultsList.searchLimitMessage), findsNothing);
         expect(find.text('Retry'), findsNothing);
+      });
+
+      testWidgets('says nothing about the end while more can load', (
+        tester,
+      ) async {
+        await pumpList(
+          tester,
+          results: SearchResults(items: repos, totalCount: 90, hasMore: true),
+        );
+
+        expect(find.text(SearchResultsList.endOfResultsMessage), findsNothing);
       });
     });
 
     group('golden', () {
       for (final device in goldenDevices) {
-        testGoldens('search limit reached', device, (tester) async {
+        /// The fixture's results, scrolled to the end of the list.
+        Future<void> expectEndGolden(
+          WidgetTester tester, {
+          required int totalCount,
+          required String name,
+        }) async {
           final fixture = SearchPage.fromJson(
             searchFixture(),
             page: 1,
@@ -247,7 +267,7 @@ void main() {
               tester,
               results: SearchResults(
                 items: fixture.items,
-                totalCount: fixture.totalCount,
+                totalCount: totalCount,
                 hasMore: false,
               ),
             );
@@ -258,10 +278,22 @@ void main() {
             await expectLater(
               find.byType(SearchResultsList),
               matchesGoldenFile(
-                'goldens/search_results_list_search_limit_${device.name}.png',
+                'goldens/search_results_list_${name}_${device.name}.png',
               ),
             );
           });
+        }
+
+        testGoldens('search limit reached', device, (tester) async {
+          await expectEndGolden(
+            tester,
+            totalCount: 1084791,
+            name: 'search_limit',
+          );
+        });
+
+        testGoldens('end of results', device, (tester) async {
+          await expectEndGolden(tester, totalCount: 10, name: 'end');
         });
       }
     });

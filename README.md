@@ -118,6 +118,7 @@ The Search tab (`lib/ui/search/`) searches repositories by keyword. Its state is
 - **Duplicates.** Results can shift between requests, so a page may repeat a repository; it is skipped.
 - **Stale pages.** A page that arrives after the search reloaded is dropped.
 - **The 1,000-result limit.** GitHub returns at most 1,000 results per search. When paging stops there while `total_count` is larger, the end of the list says only the first 1,000 results are shown and suggests a more specific search.
+- **The end.** Once every result has been loaded, the end of the list says there are no more results.
 
 ### Avatars
 
@@ -127,7 +128,7 @@ The Search tab (`lib/ui/search/`) searches repositories by keyword. Its state is
 
 - `test/fixtures/` holds a real Search API response for `flutter` and its owners' avatars, saved by `dart run tool/fetch_search_fixtures.dart`. The parser and the golden tests use it.
 - `withAvatarFixtures` (`test/helpers/avatars.dart`) makes `Image.network` load those avatars instead of the network, through Flutter's `debugNetworkImageHttpClientProvider`, so goldens show real images.
-- Golden tests cover the results, no results, rate limited and end-of-results states at every device size.
+- Golden tests cover the results, no results and rate limited states, and both ends of the list (every result shown, and the 1,000-result limit), at every device size.
 
 ## Favorites
 

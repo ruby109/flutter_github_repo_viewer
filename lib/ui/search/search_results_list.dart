@@ -36,16 +36,15 @@ class SearchResultsList extends StatelessWidget {
       'Only the first 1,000 results are shown. '
       'Try a more specific search.';
 
+  static const endOfResultsMessage = 'No more results';
+
   @override
   Widget build(BuildContext context) {
     final items = results.items;
-    final hasFooter =
-        results.hasMore ||
-        results.loadMoreError != null ||
-        results.reachedSearchLimit;
     return ListView.builder(
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-      itemCount: items.length + (hasFooter ? 1 : 0),
+      // The last row is the footer.
+      itemCount: items.length + 1,
       itemBuilder: (context, index) {
         // Checked as rows are built rather than on scroll, so a first page
         // that doesn't fill the screen still loads more.
@@ -70,8 +69,8 @@ class SearchResultsList extends StatelessWidget {
   }
 }
 
-/// Shows that more results are loading, why loading them failed, or that
-/// the search hit GitHub's result limit.
+/// Shows that more results are loading, why loading them failed, that the
+/// search hit GitHub's result limit, or that every result has been shown.
 class _Footer extends StatelessWidget {
   const _Footer({required this.results, required this.onRetry});
 
@@ -102,7 +101,9 @@ class _Footer extends StatelessWidget {
           child: CircularProgressIndicator(),
         ),
         _ => Text(
-          SearchResultsList.searchLimitMessage,
+          results.reachedSearchLimit
+              ? SearchResultsList.searchLimitMessage
+              : SearchResultsList.endOfResultsMessage,
           style: textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
           textAlign: TextAlign.center,
         ),
