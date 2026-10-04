@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/github/github_repo.dart';
 import '../data/preferences/shared_preferences_provider.dart';
@@ -32,8 +33,10 @@ class FavoritesNotifier extends Notifier<List<GitHubRepo>> {
   static const storageKey = 'favorites';
 
   @override
-  List<GitHubRepo> build() {
-    final stored = ref.watch(sharedPreferencesProvider).get(storageKey);
+  List<GitHubRepo> build() => _read(ref.watch(sharedPreferencesProvider));
+
+  static List<GitHubRepo> _read(SharedPreferencesWithCache preferences) {
+    final stored = preferences.get(storageKey);
     return stored is String ? _decode(stored) : const [];
   }
 
@@ -67,10 +70,20 @@ class FavoritesNotifier extends Notifier<List<GitHubRepo>> {
     }
   }
 
+  /// Saves started by [toggle] that haven't finished yet.
+  int _pendingSaves = 0;
+
+  /// Whether a save failed since favorites were last restored from storage.
+  bool _saveFailed = false;
+
   /// Stars [repo] if it isn't starred, otherwise unstars it.
   ///
-  /// Updates [state] at once so every screen reflects the change, then saves.
-  Future<void> toggle(GitHubRepo repo) {
+  /// Updates [state] at once so every screen reflects the change, then saves
+  /// the whole list. If saving fails, rethrows so the UI can tell the user,
+  /// and restores what is actually stored once no other save is pending:
+  /// a later save also stores this change, so undoing only this change
+  /// could disagree with storage.
+  Future<void> toggle(GitHubRepo repo) async {
     final isStarred = state.any((favorite) => favorite.id == repo.id);
     state = isStarred
         ? [
@@ -79,8 +92,32 @@ class FavoritesNotifier extends Notifier<List<GitHubRepo>> {
           ]
         : [repo, ...state];
 
-    return ref
-        .read(sharedPreferencesProvider)
-        .setString(storageKey, jsonEncode(state));
+    _pendingSaves++;
+    try {
+      await ref
+          .read(sharedPreferencesProvider)
+          .setString(storageKey, jsonEncode(state));
+    } on Object {
+      _saveFailed = true;
+      rethrow;
+    } finally {
+      _pendingSaves--;
+      if (_pendingSaves == 0 && _saveFailed) await _restoreFromStorage();
+    }
+  }
+
+  Future<void> _restoreFromStorage() async {
+    _saveFailed = false;
+    if (!ref.mounted) return;
+    final preferences = ref.read(sharedPreferencesProvider);
+    try {
+      await preferences.reloadCache();
+    } on Object {
+      // Keep the current favorites; the next successful save stores them.
+      return;
+    }
+    // A toggle started while reloading saves a newer list than was read.
+    if (!ref.mounted || _pendingSaves > 0) return;
+    state = _read(preferences);
   }
 }
