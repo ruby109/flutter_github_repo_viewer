@@ -126,7 +126,7 @@ The Search tab (`lib/ui/search/`) searches repositories by keyword. Its state is
 
 ### Testing the screen
 
-- `test/fixtures/` holds a real Search API response for `flutter` and its owners' avatars, saved by `dart run tool/fetch_search_fixtures.dart`. The parser and the golden tests use it.
+- `test/fixtures/` holds a real Search API response for `flutter`, the Repository API response for its first result, and their owners' avatars, saved by `dart run tool/fetch_fixtures.dart`. The parsers and the golden tests use them.
 - `withAvatarFixtures` (`test/helpers/avatars.dart`) makes `Image.network` load those avatars instead of the network, through Flutter's `debugNetworkImageHttpClientProvider`, so goldens show real images.
 - Golden tests cover the results, no results and rate limited states, and both ends of the list (every result shown, and the 1,000-result limit), at every device size.
 
