@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 import 'package:github_repo_viewer/data/github/github_api_client.dart';
+import 'package:github_repo_viewer/data/github/github_api_exception.dart';
 
 import '../../helpers/github_json.dart';
 
@@ -12,8 +13,15 @@ void main() {
   group('GitHubApiClient', () {
     late List<http.Request> requests;
 
-    /// A client whose HTTP calls all answer [statusCode] with [body].
-    GitHubApiClient clientReturning(Object? body, {int statusCode = 200}) {
+    final now = DateTime.utc(2026, 1, 1, 12);
+
+    /// A client whose HTTP calls all answer [statusCode] with [body] and
+    /// [headers], and whose clock is fixed at [now].
+    GitHubApiClient clientReturning(
+      Object? body, {
+      int statusCode = 200,
+      Map<String, String> headers = const {},
+    }) {
       requests = [];
       return GitHubApiClient(
         MockClient((request) async {
@@ -21,9 +29,13 @@ void main() {
           return http.Response(
             jsonEncode(body),
             statusCode,
-            headers: {'content-type': 'application/json; charset=utf-8'},
+            headers: {
+              'content-type': 'application/json; charset=utf-8',
+              ...headers,
+            },
           );
         }),
+        now: () => now,
       );
     }
 
@@ -151,6 +163,104 @@ void main() {
           expect(requests, isEmpty);
         });
       }
+    });
+
+    // https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api#exceeding-the-rate-limit
+    group('rate limiting', () {
+      Future<Object?> searchError(GitHubApiClient client) async {
+        try {
+          await client.searchRepositories('flutter');
+        } catch (error) {
+          return error;
+        }
+        fail('expected searchRepositories to throw');
+      }
+
+      test('throws RateLimitException until x-ratelimit-reset', () async {
+        final resetAt = now.add(const Duration(minutes: 30));
+        final client = clientReturning(
+          {'message': 'API rate limit exceeded for 203.0.113.1.'},
+          statusCode: 403,
+          headers: {
+            'x-ratelimit-remaining': '0',
+            'x-ratelimit-reset': '${resetAt.millisecondsSinceEpoch ~/ 1000}',
+          },
+        );
+
+        final error = await searchError(client);
+
+        expect(error, isA<RateLimitException>());
+        expect((error! as RateLimitException).retryAt, resetAt);
+      });
+
+      test('throws RateLimitException until retry-after elapses', () async {
+        final client = clientReturning(
+          {'message': 'You have exceeded a secondary rate limit.'},
+          statusCode: 429,
+          headers: {'retry-after': '60'},
+        );
+
+        final error = await searchError(client);
+
+        expect(error, isA<RateLimitException>());
+        expect(
+          (error! as RateLimitException).retryAt,
+          now.add(const Duration(seconds: 60)),
+        );
+      });
+
+      test('prefers retry-after over x-ratelimit-reset', () async {
+        final client = clientReturning(
+          {'message': 'You have exceeded a secondary rate limit.'},
+          statusCode: 403,
+          headers: {
+            'retry-after': '60',
+            'x-ratelimit-remaining': '0',
+            'x-ratelimit-reset': '${now.millisecondsSinceEpoch ~/ 1000 + 3600}',
+          },
+        );
+
+        final error = await searchError(client);
+
+        expect(
+          (error! as RateLimitException).retryAt,
+          now.add(const Duration(seconds: 60)),
+        );
+      });
+
+      // Secondary rate limits may come without retry-after or a zero
+      // remaining count; only the message tells them apart.
+      test('recognizes a secondary rate limit by its message', () async {
+        final client = clientReturning(
+          {'message': 'You have exceeded a secondary rate limit.'},
+          statusCode: 403,
+          headers: {'x-ratelimit-remaining': '42'},
+        );
+
+        final error = await searchError(client);
+
+        expect(error, isA<RateLimitException>());
+        expect((error! as RateLimitException).retryAt, isNull);
+      });
+
+      test('treats any 429 as a rate limit', () async {
+        final client = clientReturning({}, statusCode: 429);
+
+        expect(await searchError(client), isA<RateLimitException>());
+      });
+
+      test('applies to fetchRepository too', () async {
+        final client = clientReturning(
+          {'message': 'API rate limit exceeded.'},
+          statusCode: 403,
+          headers: {'x-ratelimit-remaining': '0'},
+        );
+
+        await expectLater(
+          client.fetchRepository('flutter/flutter'),
+          throwsA(isA<RateLimitException>()),
+        );
+      });
     });
   });
 }

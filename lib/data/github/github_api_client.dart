@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'github_api_exception.dart';
 import 'repo_detail.dart';
 import 'search_page.dart';
 
@@ -10,9 +11,11 @@ import 'search_page.dart';
 /// See https://docs.github.com/en/rest/search/search#search-repositories and
 /// https://docs.github.com/en/rest/repos/repos#get-a-repository.
 class GitHubApiClient {
-  GitHubApiClient(this._http);
+  /// [now] is the clock used to compute retry times; tests can fix it.
+  GitHubApiClient(this._http, {this._now = DateTime.now});
 
   final http.Client _http;
+  final DateTime Function() _now;
 
   /// Results requested per search page.
   static const perPage = 30;
@@ -58,6 +61,33 @@ class GitHubApiClient {
 
   Future<Map<String, Object?>> _getJson(Uri url) async {
     final response = await _http.get(url, headers: _headers);
+    if (_isRateLimited(response)) {
+      throw RateLimitException(retryAt: _retryAt(response.headers));
+    }
     return jsonDecode(response.body) as Map<String, Object?>;
+  }
+
+  // https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api#exceeding-the-rate-limit
+  bool _isRateLimited(http.Response response) {
+    return switch (response.statusCode) {
+      429 => true,
+      403 =>
+        response.headers.containsKey('retry-after') ||
+            response.headers['x-ratelimit-remaining'] == '0' ||
+            response.body.toLowerCase().contains('rate limit'),
+      _ => false,
+    };
+  }
+
+  DateTime? _retryAt(Map<String, String> headers) {
+    if (int.tryParse(headers['retry-after'] ?? '') case final seconds?) {
+      return _now().add(Duration(seconds: seconds));
+    }
+    if (headers['x-ratelimit-remaining'] == '0') {
+      if (int.tryParse(headers['x-ratelimit-reset'] ?? '') case final epoch?) {
+        return DateTime.fromMillisecondsSinceEpoch(epoch * 1000, isUtc: true);
+      }
+    }
+    return null;
   }
 }
