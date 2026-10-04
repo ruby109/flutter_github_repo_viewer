@@ -101,6 +101,17 @@ void main() {
       expect(find.text('Subscribers'), findsOneWidget);
     });
 
+    testWidgets('keeps the card the same width once loaded', (tester) async {
+      final response = Completer<http.Response>();
+      await pumpScreen(tester, () => response.future);
+      final loadingWidth = tester.getSize(find.byType(Card)).width;
+
+      response.complete(found());
+      await tester.pump();
+
+      expect(tester.getSize(find.byType(Card)).width, loadingWidth);
+    });
+
     group('formats the subscriber count', () {
       const cases = {0: '0', 999: '999', 1000: '1,000', 1234567: '1,234,567'};
 
@@ -173,6 +184,20 @@ void main() {
         tester.getSize(find.byType(Card)).width,
         lessThanOrEqualTo(RepoDetailScreen.maxContentWidth),
       );
+    });
+
+    // Accessibility text sizes on a narrow phone.
+    testWidgets('fits the subscriber count with large text', (tester) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      tester.platformDispatcher.textScaleFactorTestValue = 3;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      await pumpScreen(tester, () async => found(subscribers: 1234567));
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('1,234,567'), findsOneWidget);
     });
 
     testWidgets('fits a long name', (tester) async {
