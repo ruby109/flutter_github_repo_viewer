@@ -9,7 +9,6 @@ import 'package:http/testing.dart';
 import 'package:github_repo_viewer/data/github/github_api_client.dart';
 import 'package:github_repo_viewer/data/github/github_api_exception.dart';
 import 'package:github_repo_viewer/data/github/github_providers.dart';
-import 'package:github_repo_viewer/data/github/github_repo.dart';
 import 'package:github_repo_viewer/state/search_results_notifier.dart';
 
 import '../helpers/github_json.dart';
@@ -355,46 +354,52 @@ void main() {
     });
 
     group('reachedSearchLimit', () {
-      SearchResults results({
-        required int totalCount,
-        required bool hasMore,
-        int page = GitHubApiClient.maxPage,
-      }) => SearchResults(
-        items: [GitHubRepo.fromJson(repoJson())],
-        totalCount: totalCount,
-        hasMore: hasMore,
-        page: page,
-      );
-
-      test('is true when paging stopped at the last page with more matches '
-          'left', () {
-        expect(
-          results(totalCount: 5000, hasMore: false).reachedSearchLimit,
-          isTrue,
+      /// Loads all 10 pages of a search reporting 5,000 matches, one result
+      /// a page, with page 10 holding [lastPage].
+      Future<SearchResults> loadAllPages(List<int> lastPage) async {
+        final container = containerWith((request) async {
+          final page = int.parse(request.url.queryParameters['page']!);
+          return searchResponse(
+            totalCount: 5000,
+            ids: page == GitHubApiClient.maxPage ? lastPage : [page],
+          );
+        });
+        container.listen(searchResultsProvider('flutter'), (_, _) {});
+        await container.read(searchResultsProvider('flutter').future);
+        final notifier = container.read(
+          searchResultsProvider('flutter').notifier,
         );
+        for (var page = 2; page <= GitHubApiClient.maxPage; page++) {
+          await notifier.loadNextPage();
+        }
+        return container.read(searchResultsProvider('flutter')).requireValue;
+      }
+
+      test('is false while more pages can be loaded', () async {
+        final container = containerWith(
+          (_) async => searchResponse(totalCount: 5000, ids: [1]),
+        );
+
+        final results = await container.read(
+          searchResultsProvider('flutter').future,
+        );
+
+        expect(results.reachedSearchLimit, isFalse);
       });
 
-      // An empty page ends paging early when total_count overstates what
-      // GitHub returns; that isn't the 1,000-result limit.
-      test('is false when paging stopped before the last page', () {
-        expect(
-          results(totalCount: 5000, hasMore: false, page: 2).reachedSearchLimit,
-          isFalse,
-        );
+      test('is true once the last page has loaded', () async {
+        final results = await loadAllPages([10]);
+
+        expect(results.hasMore, isFalse);
+        expect(results.reachedSearchLimit, isTrue);
       });
 
-      test('is false while more pages can be loaded', () {
-        expect(
-          results(totalCount: 5000, hasMore: true).reachedSearchLimit,
-          isFalse,
-        );
-      });
+      // total_count can overstate what GitHub returns.
+      test('is false when the last page comes back empty', () async {
+        final results = await loadAllPages([]);
 
-      test('is false when every match was loaded', () {
-        expect(
-          results(totalCount: 1000, hasMore: false).reachedSearchLimit,
-          isFalse,
-        );
+        expect(results.hasMore, isFalse);
+        expect(results.reachedSearchLimit, isFalse);
       });
     });
 

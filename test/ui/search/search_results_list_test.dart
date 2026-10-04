@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
-import 'package:github_repo_viewer/data/github/github_api_client.dart';
 import 'package:github_repo_viewer/data/github/github_api_exception.dart';
 import 'package:github_repo_viewer/data/github/github_repo.dart';
 import 'package:github_repo_viewer/data/github/search_page.dart';
@@ -219,7 +218,7 @@ void main() {
             items: repos,
             totalCount: 5000,
             hasMore: false,
-            page: GitHubApiClient.maxPage,
+            reachedSearchLimit: true,
           ),
         );
 
@@ -256,6 +255,7 @@ void main() {
         Future<void> expectEndGolden(
           WidgetTester tester, {
           required int totalCount,
+          required bool reachedSearchLimit,
           required String name,
         }) async {
           final fixture = SearchPage.fromJson(
@@ -271,7 +271,7 @@ void main() {
                 items: fixture.items,
                 totalCount: totalCount,
                 hasMore: false,
-                page: GitHubApiClient.maxPage,
+                reachedSearchLimit: reachedSearchLimit,
               ),
             );
             await tester.drag(find.byType(ListView), const Offset(0, -2000));
@@ -291,12 +291,18 @@ void main() {
           await expectEndGolden(
             tester,
             totalCount: 1084791,
+            reachedSearchLimit: true,
             name: 'search_limit',
           );
         });
 
         testGoldens('end of results', device, (tester) async {
-          await expectEndGolden(tester, totalCount: 20, name: 'end');
+          await expectEndGolden(
+            tester,
+            totalCount: 20,
+            reachedSearchLimit: false,
+            name: 'end',
+          );
         });
       }
     });

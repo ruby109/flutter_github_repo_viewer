@@ -8,6 +8,7 @@ class SearchPage {
     required this.items,
     required this.totalCount,
     required this.hasMore,
+    this.reachedSearchLimit = false,
   });
 
   /// Parses page number [page] of a search requested with [perPage] results
@@ -24,12 +25,17 @@ class SearchPage {
       'items': final List<Object?> rawItems,
     }) {
       final items = [for (final item in rawItems) _parseItem(item)];
+      final reachesLimit = page * perPage >= maxResults;
       return SearchPage(
         items: items,
         totalCount: totalCount,
         // Empty pages end paging too, in case total_count overstates results.
         hasMore:
             items.isNotEmpty && page * perPage < min(totalCount, maxResults),
+        // Only a page with results ends at the limit; an empty one ends
+        // paging because GitHub had fewer results than it reported.
+        reachedSearchLimit:
+            items.isNotEmpty && reachesLimit && totalCount > maxResults,
       );
     }
     throw FormatException('Invalid search response JSON', json);
@@ -53,4 +59,8 @@ class SearchPage {
 
   /// Whether requesting the next page can return more results.
   final bool hasMore;
+
+  /// Whether this page ended paging at [maxResults] although more
+  /// repositories match.
+  final bool reachedSearchLimit;
 }

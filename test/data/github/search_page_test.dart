@@ -91,6 +91,47 @@ void main() {
       });
     });
 
+    group('reachedSearchLimit', () {
+      // Page 34 of 30 reaches result 1,000.
+      test('is true when a page with results reaches the limit and more '
+          'match', () {
+        expect(
+          parse(totalCount: 5000, itemCount: 30, page: 34).reachedSearchLimit,
+          isTrue,
+        );
+      });
+
+      test('is false before the limit', () {
+        expect(
+          parse(totalCount: 5000, itemCount: 30, page: 33).reachedSearchLimit,
+          isFalse,
+        );
+      });
+
+      // total_count can overstate what GitHub returns; an empty page ends
+      // paging without reaching the limit, wherever it comes.
+      test('is false when the page at the limit is empty', () {
+        expect(
+          parse(totalCount: 5000, itemCount: 0, page: 34).reachedSearchLimit,
+          isFalse,
+        );
+      });
+
+      test('is false when an earlier page is empty', () {
+        expect(
+          parse(totalCount: 5000, itemCount: 0, page: 2).reachedSearchLimit,
+          isFalse,
+        );
+      });
+
+      test('is false when every match fits within the limit', () {
+        expect(
+          parse(totalCount: 1000, itemCount: 10, page: 34).reachedSearchLimit,
+          isFalse,
+        );
+      });
+    });
+
     group('throws FormatException', () {
       final invalidCases = <String, void Function(Map<String, Object?>)>{
         'when items is missing': (json) => json.remove('items'),
