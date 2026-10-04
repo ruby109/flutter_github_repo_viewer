@@ -64,8 +64,10 @@ class _Subscribers extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final provider = repoDetailProvider(fullName);
     final theme = Theme.of(context);
+    // Full width in every state, so the card doesn't resize as it loads.
     return Card.outlined(
-      child: Padding(
+      child: Container(
+        width: double.infinity,
         padding: const EdgeInsets.all(16),
         child: switch (ref.watch(provider)) {
           // Checked first: retrying keeps the previous error until it loads.
@@ -91,19 +93,20 @@ class _Subscribers extends ConsumerWidget {
               ],
             ],
           ),
-          AsyncValue(:final value?) => Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+          // Wraps rather than overflows with large text on narrow screens.
+          AsyncValue(:final value?) => Wrap(
+            alignment: WrapAlignment.center,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
             children: [
               Icon(
                 Icons.visibility_outlined,
                 color: theme.colorScheme.onSurfaceVariant,
               ),
-              const SizedBox(width: 8),
               Text(
                 _formatCount(value.subscribersCount),
                 style: theme.textTheme.titleLarge,
               ),
-              const SizedBox(width: 8),
               Text('Subscribers', style: theme.textTheme.bodyLarge),
             ],
           ),
