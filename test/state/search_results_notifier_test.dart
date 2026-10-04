@@ -158,8 +158,8 @@ void main() {
       /// A container whose search for `flutter` answers page `n` with
       /// `pages[n]`, already showing page 1.
       ///
-      /// Pages hold 30 results, so a `total_count` of 60 leaves one more page
-      /// after the first.
+      /// Pages hold 100 results, so a `total_count` of 200 leaves one more
+      /// page after the first.
       Future<ProviderContainer> loadedWith(
         Map<int, Future<http.Response> Function()> pages,
       ) async {
@@ -189,8 +189,8 @@ void main() {
 
       test('appends the next page', () async {
         final container = await loadedWith({
-          1: respondWith(60, [1, 2]),
-          2: respondWith(60, [3, 4]),
+          1: respondWith(200, [1, 2]),
+          2: respondWith(200, [3, 4]),
         });
 
         await notifierIn(container).loadNextPage();
@@ -203,7 +203,7 @@ void main() {
       test('is loading more until the page arrives', () async {
         final page2 = Completer<http.Response>();
         final container = await loadedWith({
-          1: respondWith(60, [1, 2]),
+          1: respondWith(200, [1, 2]),
           2: () => page2.future,
         });
 
@@ -212,7 +212,7 @@ void main() {
         expect(resultsIn(container).isLoadingMore, isTrue);
         expect(idsIn(container), [1, 2]);
 
-        page2.complete(searchResponse(totalCount: 60, ids: [3, 4]));
+        page2.complete(searchResponse(totalCount: 200, ids: [3, 4]));
         await loading;
 
         expect(resultsIn(container).isLoadingMore, isFalse);
@@ -221,13 +221,13 @@ void main() {
       test('requests a page only once while it is loading', () async {
         final page2 = Completer<http.Response>();
         final container = await loadedWith({
-          1: respondWith(60, [1, 2]),
+          1: respondWith(200, [1, 2]),
           2: () => page2.future,
         });
 
         final first = notifierIn(container).loadNextPage();
         final second = notifierIn(container).loadNextPage();
-        page2.complete(searchResponse(totalCount: 60, ids: [3, 4]));
+        page2.complete(searchResponse(totalCount: 200, ids: [3, 4]));
         await Future.wait<void>([first, second]);
 
         expect(requests, hasLength(2));
@@ -264,8 +264,8 @@ void main() {
         final container = await loadedWith({
           1: () => reloaded
               ? Completer<http.Response>().future
-              : Future.value(searchResponse(totalCount: 60, ids: [1, 2])),
-          2: respondWith(60, [3, 4]),
+              : Future.value(searchResponse(totalCount: 200, ids: [1, 2])),
+          2: respondWith(200, [3, 4]),
         });
         reloaded = true;
         container.invalidate(searchResultsProvider('flutter'));
@@ -284,8 +284,8 @@ void main() {
       // a repository again.
       test('skips repositories already loaded', () async {
         final container = await loadedWith({
-          1: respondWith(60, [1, 2, 3]),
-          2: respondWith(60, [3, 4, 5]),
+          1: respondWith(200, [1, 2, 3]),
+          2: respondWith(200, [3, 4, 5]),
         });
 
         await notifierIn(container).loadNextPage();
@@ -297,10 +297,10 @@ void main() {
         Future<ProviderContainer> failedOnPage2() async {
           var page2Fails = true;
           final container = await loadedWith({
-            1: respondWith(60, [1, 2]),
+            1: respondWith(200, [1, 2]),
             2: () async => page2Fails
                 ? rateLimited()
-                : searchResponse(totalCount: 60, ids: [3, 4]),
+                : searchResponse(totalCount: 200, ids: [3, 4]),
           });
           await notifierIn(container).loadNextPage();
           page2Fails = false;
@@ -338,14 +338,14 @@ void main() {
       test('drops a page that arrives after the search reloaded', () async {
         final page2 = Completer<http.Response>();
         final container = await loadedWith({
-          1: respondWith(60, [1, 2]),
+          1: respondWith(200, [1, 2]),
           2: () => page2.future,
         });
         final loading = notifierIn(container).loadNextPage();
 
         container.invalidate(searchResultsProvider('flutter'));
         await container.read(searchResultsProvider('flutter').future);
-        page2.complete(searchResponse(totalCount: 60, ids: [3, 4]));
+        page2.complete(searchResponse(totalCount: 200, ids: [3, 4]));
         await loading;
 
         expect(idsIn(container), [1, 2]);

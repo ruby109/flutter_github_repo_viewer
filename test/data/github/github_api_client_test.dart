@@ -97,7 +97,7 @@ void main() {
       test('returns the parsed page', () async {
         final client = clientReturning(
           searchJson(
-            totalCount: 100,
+            totalCount: 300,
             items: [
               repoJson(id: 1, fullName: 'a/one'),
               repoJson(id: 2, fullName: 'b/two'),
@@ -108,7 +108,7 @@ void main() {
         final page = await client.searchRepositories('flutter');
 
         expect(page.items.map((repo) => repo.fullName), ['a/one', 'b/two']);
-        expect(page.totalCount, 100);
+        expect(page.totalCount, 300);
         expect(page.hasMore, isTrue);
       });
 
@@ -126,18 +126,24 @@ void main() {
     });
 
     group('searchRepositories page bounds', () {
-      // 1000 results / 30 per page: page 34 holds results 991–1000.
+      // The most GitHub allows; fewer pages mean fewer of the 10 searches a
+      // minute spent on scrolling.
+      test('asks for 100 results a page', () {
+        expect(GitHubApiClient.perPage, 100);
+      });
+
+      // 1000 results / 100 per page: page 10 holds results 901–1000.
       test('allows pages 1 to ${GitHubApiClient.maxPage}', () async {
-        expect(GitHubApiClient.maxPage, 34);
+        expect(GitHubApiClient.maxPage, 10);
         final client = clientReturning(searchJson(totalCount: 0, items: []));
 
         await client.searchRepositories('flutter', page: 1);
-        await client.searchRepositories('flutter', page: 34);
+        await client.searchRepositories('flutter', page: 10);
 
         expect(requests, hasLength(2));
       });
 
-      for (final page in [-1, 0, 35]) {
+      for (final page in [-1, 0, 11]) {
         test('rejects page $page without a request', () async {
           final client = clientReturning(searchJson(totalCount: 0, items: []));
 

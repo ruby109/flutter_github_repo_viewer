@@ -94,16 +94,18 @@ void main() {
     });
 
     group('loading more', () {
-      /// 60 rows: more than fit on the 800 pixel high test screen.
-      final manyRepos = reposUpTo(60);
+      /// Far more rows than fit on the 800 pixel high test screen.
+      final manyRepos = reposUpTo(200);
 
-      testWidgets('asks for more when the last rows are shown', (tester) async {
+      testWidgets('asks for more once half a page of rows is left', (
+        tester,
+      ) async {
         var loads = 0;
         await pumpList(
           tester,
           results: SearchResults(
             items: manyRepos,
-            totalCount: 90,
+            totalCount: 300,
             hasMore: true,
           ),
           onLoadMore: () => loads++,
@@ -112,7 +114,14 @@ void main() {
 
         expect(loads, 0);
 
-        await tester.scrollUntilVisible(find.text('owner/r55'), 500);
+        // Rows are built a little before they scroll into view, so stop well
+        // short of row 150, half a page (50 rows) before the end.
+        await tester.scrollUntilVisible(find.text('owner/r130'), 500);
+        await tester.pump();
+
+        expect(loads, 0);
+
+        await tester.scrollUntilVisible(find.text('owner/r150'), 500);
         await tester.pump();
 
         expect(loads, greaterThan(0));

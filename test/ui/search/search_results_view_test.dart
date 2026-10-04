@@ -138,31 +138,31 @@ void main() {
       await pumpView(
         tester,
         (request) async => request.url.queryParameters['page'] == '1'
-            ? found(30, totalCount: 60)
-            : found(30, totalCount: 60, firstId: 31),
+            ? found(100, totalCount: 200)
+            : found(100, totalCount: 200, firstId: 101),
       );
       await tester.pump();
 
       expect(requestCount, 1);
 
-      await tester.scrollUntilVisible(find.text('owner/r30'), 500);
+      await tester.scrollUntilVisible(find.text('owner/r60'), 500);
       await tester.pump();
       await tester.pump();
 
       expect(requestCount, 2);
-      await tester.scrollUntilVisible(find.text('owner/r60'), 500);
-      expect(find.text('owner/r60'), findsOneWidget);
+      await tester.scrollUntilVisible(find.text('owner/r200'), 500);
+      expect(find.text('owner/r200'), findsOneWidget);
     });
 
     testWidgets('retries a page that failed to load', (tester) async {
       var page2Fails = true;
       await pumpView(tester, (request) async {
         if (request.url.queryParameters['page'] == '1') {
-          return found(3, totalCount: 60);
+          return found(3, totalCount: 200);
         }
         return page2Fails
             ? rateLimited()
-            : found(3, totalCount: 60, firstId: 31);
+            : found(3, totalCount: 200, firstId: 101);
       });
       await tester.pump();
       await tester.pump();
@@ -172,7 +172,7 @@ void main() {
       await tester.pump();
 
       expect(requestCount, 3);
-      expect(find.text('owner/r31'), findsOneWidget);
+      expect(find.text('owner/r101'), findsOneWidget);
     });
   });
 }

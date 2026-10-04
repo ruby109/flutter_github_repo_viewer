@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../data/github/github_api_client.dart';
 import '../../data/github/github_repo.dart';
 import '../../state/search_results_notifier.dart';
 import '../common/error_message.dart';
@@ -27,10 +28,9 @@ class SearchResultsList extends StatelessWidget {
   /// Called when the user retries loading more after it failed.
   final VoidCallback onRetryLoadMore;
 
-  /// How many rows before the end loading more starts, so the next page
-  /// usually arrives before the user reaches the end. Rows are built a
-  /// little before they scroll into view, which adds to it.
-  static const loadMoreThreshold = 5;
+  /// How many rows before the end loading more starts: half a page, so the
+  /// next page arrives well before a fast scroll reaches the end.
+  static const loadMoreThreshold = GitHubApiClient.perPage ~/ 2;
 
   static const searchLimitMessage =
       'Only the first 1,000 results are shown. '

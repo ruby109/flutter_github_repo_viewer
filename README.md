@@ -42,8 +42,8 @@ The app calls two public endpoints of the [GitHub REST API](https://docs.github.
 | Parameter | Value |
 |---|---|
 | `q` | The search box text. A blank query is rejected before sending, since GitHub answers it with 422; the screen shows its home state instead. |
-| `page` | 1 to 34. Pages past the 1000-result limit are rejected before sending. |
-| `per_page` | 30 |
+| `page` | 1 to 10. Pages past the 1000-result limit are rejected before sending. |
+| `per_page` | 100, the most GitHub allows, so scrolling spends as few of the 10 searches a minute as possible |
 
 Fields used from each item (`GitHubRepo`):
 
@@ -110,9 +110,9 @@ The Search tab (`lib/ui/search/`) searches repositories by keyword. Its state is
 
 ### Pagination
 
-`SearchResultsNotifier.loadNextPage()` appends the next page (30 results), and the list calls it as rows are built:
+`SearchResultsNotifier.loadNextPage()` appends the next page (100 results), and the list calls it as rows are built:
 
-- **When:** once one of the last 5 rows is built. Rows are built slightly before they scroll into view, so the next page usually arrives before the user reaches the end. Checking as rows are built, rather than on scroll, also loads more when the first page doesn't fill the screen.
+- **When:** once one of the last 50 rows (half a page) is built, several screens before the end, so the next page arrives before even a fast scroll gets there. Checking as rows are built, rather than on scroll, also loads more when the first page doesn't fill the screen.
 - **At most one request at a time.** `loadNextPage` does nothing while a page or the search itself is loading, so the list can call it freely.
 - **Failed pages.** The loaded results stay, and the end of the list shows the error with a Retry button. Scrolling doesn't request the page again; only Retry does.
 - **Duplicates.** Results can shift between requests, so a page may repeat a repository; it is skipped.
