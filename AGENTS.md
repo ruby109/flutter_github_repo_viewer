@@ -56,6 +56,12 @@ Use `dart analyze`, not `flutter analyze`: only `dart analyze` runs analyzer plu
 
 Local hooks can be skipped with `--no-verify`; CI is the gate that must pass before merging.
 
+## Tests
+
+- Test files mirror `lib/`: `lib/ui/shell/home_shell.dart` is tested in `test/ui/shell/home_shell_test.dart`. Shared helpers live in `test/helpers/`.
+- One test file per source file; wrap its tests in a `group` named after the class under test.
+- Test each widget in isolation through its public API (constructor arguments and callbacks); only the widget that owns a behavior asserts it.
+
 ## Golden Tests
 
 Golden (snapshot) tests use Flutter's built-in `matchesGoldenFile` with the `testGoldens` helper in `test/helpers/golden_devices.dart`, which renders at iPhone 17, iPhone SE, iPad and Android phone sizes and tags tests `golden`. They run only on Linux CI because font rendering differs between operating systems, so never commit golden files generated on macOS: push the branch and run `scripts/update-goldens.sh` to have CI regenerate and commit them. The project skill `.claude/skills/golden-test/SKILL.md` has the full workflow.
