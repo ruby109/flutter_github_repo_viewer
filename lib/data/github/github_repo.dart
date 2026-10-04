@@ -11,6 +11,8 @@ class Owner {
   }
 
   final String avatarUrl;
+
+  Map<String, Object?> toJson() => {'avatar_url': avatarUrl};
 }
 
 /// A repository as listed in GitHub search results.
@@ -50,4 +52,11 @@ class GitHubRepo {
 
   /// Null when GitHub returns no owner, which the Search API allows.
   final Owner? owner;
+
+  /// The subset of GitHub's JSON that [GitHubRepo.fromJson] reads back.
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'full_name': fullName,
+    'owner': owner?.toJson(),
+  };
 }
