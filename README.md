@@ -41,7 +41,7 @@ The app calls two public endpoints of the [GitHub REST API](https://docs.github.
 | Parameter | Value |
 |---|---|
 | `q` | The search box text. A blank query is rejected before sending, since GitHub answers it with 422; the screen shows its home state instead. |
-| `page` | 1-based page number |
+| `page` | 1 to 34. Pages past the 1000-result limit are rejected before sending. |
 | `per_page` | 30 |
 
 Fields used from each item (`GitHubRepo`):

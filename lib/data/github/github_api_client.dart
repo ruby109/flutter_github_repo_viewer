@@ -29,6 +29,10 @@ class GitHubApiClient {
   /// Results requested per search page.
   static const perPage = 30;
 
+  /// The last page within the Search API's [SearchPage.maxResults] limit;
+  /// later pages fail with 422.
+  static const maxPage = (SearchPage.maxResults + perPage - 1) ~/ perPage;
+
   static const _host = 'api.github.com';
 
   static const _headers = {
@@ -39,11 +43,13 @@ class GitHubApiClient {
   /// Searches repositories matching [query] and returns page [page],
   /// starting at 1.
   ///
-  /// Throws an [ArgumentError] if [query] is blank.
+  /// Throws an [ArgumentError] if [query] is blank, or a [RangeError] if
+  /// [page] isn't between 1 and [maxPage].
   Future<SearchPage> searchRepositories(String query, {int page = 1}) async {
     if (query.trim().isEmpty) {
       throw ArgumentError.value(query, 'query', 'must not be blank');
     }
+    RangeError.checkValueInInterval(page, 1, maxPage, 'page');
     return _get(
       Uri.https(_host, '/search/repositories', {
         'q': query,

@@ -125,6 +125,31 @@ void main() {
       });
     });
 
+    group('searchRepositories page bounds', () {
+      // 1000 results / 30 per page: page 34 holds results 991–1000.
+      test('allows pages 1 to ${GitHubApiClient.maxPage}', () async {
+        expect(GitHubApiClient.maxPage, 34);
+        final client = clientReturning(searchJson(totalCount: 0, items: []));
+
+        await client.searchRepositories('flutter', page: 1);
+        await client.searchRepositories('flutter', page: 34);
+
+        expect(requests, hasLength(2));
+      });
+
+      for (final page in [-1, 0, 35]) {
+        test('rejects page $page without a request', () async {
+          final client = clientReturning(searchJson(totalCount: 0, items: []));
+
+          await expectLater(
+            client.searchRepositories('flutter', page: page),
+            throwsA(isA<RangeError>()),
+          );
+          expect(requests, isEmpty);
+        });
+      }
+    });
+
     group('fetchRepository', () {
       Map<String, Object?> detailJson() =>
           repoJson(id: 7, fullName: 'flutter/flutter')
