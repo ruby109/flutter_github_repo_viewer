@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:github_repo_viewer/data/github/search_page.dart';
 
+import '../../helpers/fixtures.dart';
 import '../../helpers/github_json.dart';
 
 void main() {
@@ -38,6 +39,19 @@ void main() {
 
       expect(result.items.map((repo) => repo.fullName), ['a/one', 'b/two']);
       expect(result.totalCount, 2);
+    });
+
+    test('parses a real Search API response', () {
+      final result = SearchPage.fromJson(searchFixture(), page: 1, perPage: 10);
+
+      expect(result.items, hasLength(10));
+      expect(result.items.first.fullName, 'flutter/flutter');
+      expect(
+        result.items.first.owner?.avatarUrl,
+        'https://avatars.githubusercontent.com/u/14101776?v=4',
+      );
+      expect(result.totalCount, greaterThan(SearchPage.maxResults));
+      expect(result.hasMore, isTrue);
     });
 
     group('hasMore', () {
