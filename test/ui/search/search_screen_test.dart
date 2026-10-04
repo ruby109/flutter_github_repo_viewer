@@ -8,11 +8,15 @@ import 'package:http/testing.dart';
 
 import 'package:github_repo_viewer/data/github/github_providers.dart';
 import 'package:github_repo_viewer/data/preferences/shared_preferences_provider.dart';
+import 'package:github_repo_viewer/state/favorites_notifier.dart';
 import 'package:github_repo_viewer/state/search_query_notifier.dart';
 import 'package:github_repo_viewer/ui/search/search_results_view.dart';
 import 'package:github_repo_viewer/ui/search/search_screen.dart';
 
+import '../../helpers/avatars.dart';
+import '../../helpers/fixtures.dart';
 import '../../helpers/github_json.dart';
+import '../../helpers/golden_devices.dart';
 import '../../helpers/preferences.dart';
 
 void main() {
@@ -139,6 +143,97 @@ void main() {
       await search(tester, 'riverpod');
 
       expect(shownQuery(tester), 'riverpod');
+    });
+
+    group('golden', () {
+      /// Shows the screen after searching `flutter`, with GitHub answering
+      /// [response] and the first result starred.
+      Future<void> pumpSearched(
+        WidgetTester tester,
+        http.Response response,
+      ) async {
+        final firstResult = (searchFixture()['items']! as List<Object?>).first;
+        final preferences = await inMemoryPreferences({
+          FavoritesNotifier.storageKey: jsonEncode([firstResult]),
+        });
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              sharedPreferencesProvider.overrideWithValue(preferences),
+              httpClientProvider.overrideWithValue(
+                MockClient((_) async => response),
+              ),
+            ],
+            child: MaterialApp(
+              debugShowCheckedModeBanner: false,
+              home: SearchScreen(onRepoTap: (_) {}),
+            ),
+          ),
+        );
+        await search(tester, 'flutter');
+        // Searching hides the keyboard; let the box finish unfocusing.
+        await tester.pumpAndSettle();
+      }
+
+      Future<void> expectGolden(
+        WidgetTester tester,
+        String state,
+        GoldenDevice device,
+      ) {
+        return expectLater(
+          find.byType(SearchScreen),
+          matchesGoldenFile(
+            'goldens/search_screen_${state}_${device.name}.png',
+          ),
+        );
+      }
+
+      for (final device in goldenDevices) {
+        testGoldens('results', device, (tester) async {
+          // Only the fixture's 10 results, so no more are loading.
+          final fixture = searchFixture()..['total_count'] = 10;
+
+          await withAvatarFixtures((_) async {
+            // Encoded as GitHub does: the descriptions aren't all Latin-1.
+            await pumpSearched(
+              tester,
+              http.Response.bytes(
+                utf8.encode(jsonEncode(fixture)),
+                200,
+                headers: {'content-type': 'application/json; charset=utf-8'},
+              ),
+            );
+            await loadImages(tester);
+
+            await expectGolden(tester, 'results', device);
+          });
+        });
+
+        testGoldens('no results', device, (tester) async {
+          await pumpSearched(
+            tester,
+            http.Response(
+              jsonEncode(searchJson(totalCount: 0, items: [])),
+              200,
+            ),
+          );
+
+          await expectGolden(tester, 'empty', device);
+        });
+
+        testGoldens('rate limited', device, (tester) async {
+          await pumpSearched(
+            tester,
+            http.Response(
+              '{"message": "API rate limit exceeded"}',
+              403,
+              headers: {'x-ratelimit-remaining': '0'},
+            ),
+          );
+
+          await expectGolden(tester, 'rate_limited', device);
+        });
+      }
     });
   });
 }

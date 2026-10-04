@@ -4,13 +4,17 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import 'package:github_repo_viewer/data/github/github_api_exception.dart';
 import 'package:github_repo_viewer/data/github/github_repo.dart';
+import 'package:github_repo_viewer/data/github/search_page.dart';
 import 'package:github_repo_viewer/data/preferences/shared_preferences_provider.dart';
 import 'package:github_repo_viewer/state/search_results_notifier.dart';
 import 'package:github_repo_viewer/ui/common/repo_list_tile.dart';
 import 'package:github_repo_viewer/ui/common/star_button.dart';
 import 'package:github_repo_viewer/ui/search/search_results_list.dart';
 
+import '../../helpers/avatars.dart';
+import '../../helpers/fixtures.dart';
 import '../../helpers/github_json.dart';
+import '../../helpers/golden_devices.dart';
 import '../../helpers/preferences.dart';
 
 void main() {
@@ -34,6 +38,7 @@ void main() {
         ProviderScope(
           overrides: [sharedPreferencesProvider.overrideWithValue(preferences)],
           child: MaterialApp(
+            debugShowCheckedModeBanner: false,
             home: Scaffold(
               body: SearchResultsList(
                 results:
@@ -217,6 +222,39 @@ void main() {
         expect(find.text(SearchResultsList.searchLimitMessage), findsNothing);
         expect(find.text('Retry'), findsNothing);
       });
+    });
+
+    group('golden', () {
+      for (final device in goldenDevices) {
+        testGoldens('search limit reached', device, (tester) async {
+          final fixture = SearchPage.fromJson(
+            searchFixture(),
+            page: 1,
+            perPage: 10,
+          );
+
+          await withAvatarFixtures((_) async {
+            await pumpList(
+              tester,
+              results: SearchResults(
+                items: fixture.items,
+                totalCount: fixture.totalCount,
+                hasMore: false,
+              ),
+            );
+            await tester.drag(find.byType(ListView), const Offset(0, -2000));
+            await tester.pumpAndSettle();
+            await loadImages(tester);
+
+            await expectLater(
+              find.byType(SearchResultsList),
+              matchesGoldenFile(
+                'goldens/search_results_list_search_limit_${device.name}.png',
+              ),
+            );
+          });
+        });
+      }
     });
   });
 }
