@@ -7,8 +7,8 @@ sealed class GitHubApiException implements Exception {
 
 /// GitHub refused the request because the rate limit was exceeded.
 ///
-/// Unauthenticated clients get 10 searches and 60 other requests a minute
-/// per IP address.
+/// Unauthenticated clients get 10 searches a minute and 60 other requests an
+/// hour per IP address.
 final class RateLimitException extends GitHubApiException {
   const RateLimitException({this.retryAt});
 
