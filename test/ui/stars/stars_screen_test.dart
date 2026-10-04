@@ -40,7 +40,10 @@ void main() {
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
-          child: MaterialApp(home: StarsScreen(onRepoTap: onRepoTap ?? (_) {})),
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            home: StarsScreen(onRepoTap: onRepoTap ?? (_) {}),
+          ),
         ),
       );
       return container;
