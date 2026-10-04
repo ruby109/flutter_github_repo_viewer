@@ -9,7 +9,7 @@ import 'dart:convert';
 import 'dart:io';
 
 const _query = 'flutter';
-const _itemCount = 10;
+const _itemCount = 20;
 
 /// Avatars are shown at most 40 logical pixels wide, so 80 pixels covers a
 /// 2x screen.

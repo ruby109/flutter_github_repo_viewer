@@ -42,9 +42,9 @@ void main() {
     });
 
     test('parses a real Search API response', () {
-      final result = SearchPage.fromJson(searchFixture(), page: 1, perPage: 10);
+      final result = SearchPage.fromJson(searchFixture(), page: 1, perPage: 20);
 
-      expect(result.items, hasLength(10));
+      expect(result.items, hasLength(20));
       expect(result.items.first.fullName, 'flutter/flutter');
       expect(
         result.items.first.owner?.avatarUrl,

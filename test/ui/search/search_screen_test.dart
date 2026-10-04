@@ -190,8 +190,8 @@ void main() {
 
       for (final device in goldenDevices) {
         testGoldens('results', device, (tester) async {
-          // Only the fixture's 10 results, so no more are loading.
-          final fixture = searchFixture()..['total_count'] = 10;
+          // Only the fixture's 20 results, so no more are loading.
+          final fixture = searchFixture()..['total_count'] = 20;
 
           await withAvatarFixtures((_) async {
             // Encoded as GitHub does: the descriptions aren't all Latin-1.

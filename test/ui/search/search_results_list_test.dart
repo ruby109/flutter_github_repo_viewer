@@ -259,7 +259,7 @@ void main() {
           final fixture = SearchPage.fromJson(
             searchFixture(),
             page: 1,
-            perPage: 10,
+            perPage: 20,
           );
 
           await withAvatarFixtures((_) async {
@@ -293,7 +293,7 @@ void main() {
         });
 
         testGoldens('end of results', device, (tester) async {
-          await expectEndGolden(tester, totalCount: 10, name: 'end');
+          await expectEndGolden(tester, totalCount: 20, name: 'end');
         });
       }
     });
