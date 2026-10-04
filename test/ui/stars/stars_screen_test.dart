@@ -10,7 +10,10 @@ import 'package:github_repo_viewer/state/favorites_notifier.dart';
 import 'package:github_repo_viewer/ui/common/repo_list_tile.dart';
 import 'package:github_repo_viewer/ui/stars/stars_screen.dart';
 
+import '../../helpers/avatars.dart';
+import '../../helpers/fixtures.dart';
 import '../../helpers/github_json.dart';
+import '../../helpers/golden_devices.dart';
 import '../../helpers/preferences.dart';
 
 void main() {
@@ -116,6 +119,40 @@ void main() {
       await tester.tap(find.text('owner/r1'));
 
       expect(tapped.single.id, 1);
+    });
+
+    group('golden', () {
+      for (final device in goldenDevices) {
+        testGoldens('starred', device, (tester) async {
+          // Real search results, starred.
+          final starred = (searchFixture()['items']! as List<Object?>)
+              .take(6)
+              .cast<Map<String, Object?>>()
+              .map(GitHubRepo.fromJson)
+              .toList();
+
+          await withAvatarFixtures((_) async {
+            await pumpScreen(tester, stored: starred);
+            await loadImages(tester);
+
+            await expectLater(
+              find.byType(StarsScreen),
+              matchesGoldenFile(
+                'goldens/stars_screen_starred_${device.name}.png',
+              ),
+            );
+          });
+        });
+
+        testGoldens('empty', device, (tester) async {
+          await pumpScreen(tester);
+
+          await expectLater(
+            find.byType(StarsScreen),
+            matchesGoldenFile('goldens/stars_screen_empty_${device.name}.png'),
+          );
+        });
+      }
     });
   });
 }
