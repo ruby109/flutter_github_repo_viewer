@@ -10,11 +10,15 @@ import 'package:http/testing.dart';
 import 'package:github_repo_viewer/data/github/github_providers.dart';
 import 'package:github_repo_viewer/data/github/github_repo.dart';
 import 'package:github_repo_viewer/data/preferences/shared_preferences_provider.dart';
+import 'package:github_repo_viewer/state/favorites_notifier.dart';
 import 'package:github_repo_viewer/ui/common/repo_avatar.dart';
 import 'package:github_repo_viewer/ui/common/star_button.dart';
 import 'package:github_repo_viewer/ui/detail/repo_detail_screen.dart';
 
+import '../../helpers/avatars.dart';
+import '../../helpers/fixtures.dart';
 import '../../helpers/github_json.dart';
+import '../../helpers/golden_devices.dart';
 import '../../helpers/preferences.dart';
 
 void main() {
@@ -180,6 +184,104 @@ void main() {
       await tester.pump();
 
       expect(tester.takeException(), isNull);
+    });
+
+    group('golden', () {
+      /// Shows `flutter/flutter` from the fixtures, starred, with the
+      /// Repository API answering [respond].
+      Future<void> pumpFixture(
+        WidgetTester tester,
+        Future<http.Response> Function() respond,
+      ) async {
+        final detail = repoDetailFixture();
+        final preferences = await inMemoryPreferences({
+          FavoritesNotifier.storageKey: jsonEncode([detail]),
+        });
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              sharedPreferencesProvider.overrideWithValue(preferences),
+              httpClientProvider.overrideWithValue(
+                MockClient((_) => respond()),
+              ),
+            ],
+            // Pushed over another route, as in the app, so it has a back
+            // button.
+            child: MaterialApp(
+              debugShowCheckedModeBanner: false,
+              initialRoute: '/detail',
+              routes: {
+                '/': (_) => const SizedBox.shrink(),
+                '/detail': (_) =>
+                    RepoDetailScreen(repo: GitHubRepo.fromJson(detail)),
+              },
+            ),
+          ),
+        );
+      }
+
+      Future<void> expectGolden(String state, GoldenDevice device) {
+        return expectLater(
+          find.byType(RepoDetailScreen),
+          matchesGoldenFile(
+            'goldens/repo_detail_screen_${state}_${device.name}.png',
+          ),
+        );
+      }
+
+      for (final device in goldenDevices) {
+        testGoldens('loaded', device, (tester) async {
+          await withAvatarFixtures((_) async {
+            await pumpFixture(
+              tester,
+              () async => http.Response.bytes(
+                utf8.encode(jsonEncode(repoDetailFixture())),
+                200,
+                headers: {'content-type': 'application/json; charset=utf-8'},
+              ),
+            );
+            await tester.pump();
+            await loadImages(tester);
+
+            await expectGolden('loaded', device);
+          });
+        });
+
+        testGoldens('loading', device, (tester) async {
+          final response = Completer<http.Response>();
+          await withAvatarFixtures((_) async {
+            await pumpFixture(tester, () => response.future);
+            await loadImages(tester);
+            // Past the progress indicator's first frame, which is a dot.
+            await tester.pump(const Duration(milliseconds: 400));
+
+            await expectGolden('loading', device);
+          });
+          // Finish the request so no timer is left pending.
+          response.complete(http.Response('{}', 404));
+          await tester.pump();
+        });
+
+        testGoldens('rate limited', device, (tester) async {
+          await withAvatarFixtures((_) async {
+            await pumpFixture(tester, () async => rateLimited());
+            await tester.pump();
+            await loadImages(tester);
+
+            await expectGolden('rate_limited', device);
+          });
+        });
+
+        testGoldens('not found', device, (tester) async {
+          await withAvatarFixtures((_) async {
+            await pumpFixture(tester, () async => http.Response('{}', 404));
+            await tester.pump();
+            await loadImages(tester);
+
+            await expectGolden('not_found', device);
+          });
+        });
+      }
     });
   });
 }
