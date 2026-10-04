@@ -18,3 +18,21 @@ final class RateLimitException extends GitHubApiException {
   @override
   String toString() => 'RateLimitException(retryAt: $retryAt)';
 }
+
+/// The requested resource doesn't exist (404), e.g. a deleted repository.
+final class NotFoundException extends GitHubApiException {
+  const NotFoundException();
+
+  @override
+  String toString() => 'NotFoundException()';
+}
+
+/// GitHub answered with an unexpected HTTP status.
+final class HttpStatusException extends GitHubApiException {
+  const HttpStatusException(this.statusCode);
+
+  final int statusCode;
+
+  @override
+  String toString() => 'HttpStatusException($statusCode)';
+}

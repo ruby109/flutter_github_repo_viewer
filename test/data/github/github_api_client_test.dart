@@ -262,5 +262,58 @@ void main() {
         );
       });
     });
+
+    group('HTTP errors', () {
+      test('throws NotFoundException for 404', () async {
+        final client = clientReturning({
+          'message': 'Not Found',
+        }, statusCode: 404);
+
+        await expectLater(
+          client.fetchRepository('flutter/deleted'),
+          throwsA(isA<NotFoundException>()),
+        );
+      });
+
+      // 403 also means "forbidden", e.g. a repository blocked for legal
+      // reasons; only rate limiting is reported as RateLimitException.
+      test('throws HttpStatusException for a 403 that is not a rate limit', () {
+        final client = clientReturning(
+          {'message': 'Repository access blocked'},
+          statusCode: 403,
+          headers: {'x-ratelimit-remaining': '42'},
+        );
+
+        expect(
+          client.fetchRepository('owner/blocked'),
+          throwsA(
+            isA<HttpStatusException>().having(
+              (e) => e.statusCode,
+              'statusCode',
+              403,
+            ),
+          ),
+        );
+      });
+
+      for (final statusCode in [422, 500, 503]) {
+        test('throws HttpStatusException for $statusCode', () {
+          final client = clientReturning({
+            'message': 'error',
+          }, statusCode: statusCode);
+
+          expect(
+            client.searchRepositories('flutter'),
+            throwsA(
+              isA<HttpStatusException>().having(
+                (e) => e.statusCode,
+                'statusCode',
+                statusCode,
+              ),
+            ),
+          );
+        });
+      }
+    });
   });
 }

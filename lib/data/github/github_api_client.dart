@@ -64,6 +64,14 @@ class GitHubApiClient {
     if (_isRateLimited(response)) {
       throw RateLimitException(retryAt: _retryAt(response.headers));
     }
+    switch (response.statusCode) {
+      case >= 200 && < 300:
+        break;
+      case 404:
+        throw const NotFoundException();
+      case final statusCode:
+        throw HttpStatusException(statusCode);
+    }
     return jsonDecode(response.body) as Map<String, Object?>;
   }
 
