@@ -1,12 +1,23 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+
+import 'package:github_repo_viewer/data/github/github_providers.dart';
+import 'package:github_repo_viewer/data/preferences/shared_preferences_provider.dart';
+import 'package:github_repo_viewer/ui/common/repo_list_tile.dart';
+import 'package:github_repo_viewer/ui/detail/repo_detail_screen.dart';
 
 import 'package:github_repo_viewer/ui/search/search_screen.dart';
 import 'package:github_repo_viewer/ui/shell/app_tab.dart';
 import 'package:github_repo_viewer/ui/shell/home_shell.dart';
 
+import '../../helpers/github_json.dart';
 import '../../helpers/golden_devices.dart';
+import '../../helpers/preferences.dart';
 
 void main() {
   group('HomeShell', () {
@@ -33,6 +44,76 @@ void main() {
       await pumpShell(tester);
 
       expect(find.byType(SearchScreen), findsOneWidget);
+    });
+
+    group('opening a repository', () {
+      /// The shell over a GitHub API that finds `flutter/flutter` and
+      /// reports 3,546 subscribers for it.
+      Future<void> pumpWithApi(WidgetTester tester) async {
+        final preferences = await inMemoryPreferences();
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              sharedPreferencesProvider.overrideWithValue(preferences),
+              httpClientProvider.overrideWithValue(
+                MockClient((request) async {
+                  final repo = repoJson(id: 7, fullName: 'flutter/flutter');
+                  return http.Response(
+                    jsonEncode(
+                      request.url.path == '/search/repositories'
+                          ? searchJson(totalCount: 1, items: [repo])
+                          : (repo..['subscribers_count'] = 3546),
+                    ),
+                    200,
+                  );
+                }),
+              ),
+            ],
+            child: const MaterialApp(home: HomeShell()),
+          ),
+        );
+        await tester.enterText(find.byType(TextField), 'flutter');
+        await tester.testTextInput.receiveAction(TextInputAction.search);
+        await tester.pumpAndSettle();
+      }
+
+      testWidgets('opens it when a search result is tapped', (tester) async {
+        await pumpWithApi(tester);
+
+        await tester.tap(find.text('flutter/flutter'));
+        await tester.pumpAndSettle();
+
+        expect(
+          tester
+              .widget<RepoDetailScreen>(find.byType(RepoDetailScreen))
+              .repo
+              .id,
+          7,
+        );
+        expect(find.text('3,546'), findsOneWidget);
+      });
+
+      testWidgets('shows the star changed there on returning to the list', (
+        tester,
+      ) async {
+        await pumpWithApi(tester);
+        await tester.tap(find.text('flutter/flutter'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byTooltip('Star'));
+        await tester.pump();
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+
+        expect(find.byType(RepoDetailScreen), findsNothing);
+        expect(
+          find.descendant(
+            of: find.widgetWithText(RepoListTile, 'flutter/flutter'),
+            matching: find.byTooltip('Unstar'),
+          ),
+          findsOneWidget,
+        );
+      });
     });
 
     testWidgets('switches content and navigation when a tab is tapped', (

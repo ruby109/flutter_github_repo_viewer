@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 
+import '../detail/repo_detail_screen.dart';
 import '../search/search_screen.dart';
 import 'app_bottom_navigation.dart';
 import 'app_tab.dart';
@@ -21,8 +22,15 @@ class HomeShell extends HookWidget {
         children: [
           for (final tab in AppTab.values)
             switch (tab) {
-              // Opening a repository comes with the detail screen.
-              AppTab.search => SearchScreen(onRepoTap: (_) {}),
+              // Pushed over the shell: the detail screen has its own back
+              // button, and the list keeps its scroll position underneath.
+              AppTab.search => SearchScreen(
+                onRepoTap: (repo) => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => RepoDetailScreen(repo: repo),
+                  ),
+                ),
+              ),
               AppTab.favorites => Container(),
             },
         ],
