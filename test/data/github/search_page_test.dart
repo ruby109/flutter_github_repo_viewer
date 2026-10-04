@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:github_repo_viewer/data/github/search_page.dart';
 
+import '../../helpers/fixtures.dart';
 import '../../helpers/github_json.dart';
 
 void main() {
@@ -40,6 +41,19 @@ void main() {
       expect(result.totalCount, 2);
     });
 
+    test('parses a real Search API response', () {
+      final result = SearchPage.fromJson(searchFixture(), page: 1, perPage: 20);
+
+      expect(result.items, hasLength(20));
+      expect(result.items.first.fullName, 'flutter/flutter');
+      expect(
+        result.items.first.owner?.avatarUrl,
+        'https://avatars.githubusercontent.com/u/14101776?v=4',
+      );
+      expect(result.totalCount, greaterThan(SearchPage.maxResults));
+      expect(result.hasMore, isTrue);
+    });
+
     group('hasMore', () {
       test('is true when results remain after this page', () {
         expect(parse(totalCount: 100, itemCount: 30, page: 1).hasMore, isTrue);
@@ -74,6 +88,47 @@ void main() {
       // overstates what GitHub actually returns.
       test('is false when a page comes back empty', () {
         expect(parse(totalCount: 100, itemCount: 0, page: 2).hasMore, isFalse);
+      });
+    });
+
+    group('reachedSearchLimit', () {
+      // Page 34 of 30 reaches result 1,000.
+      test('is true when a page with results reaches the limit and more '
+          'match', () {
+        expect(
+          parse(totalCount: 5000, itemCount: 30, page: 34).reachedSearchLimit,
+          isTrue,
+        );
+      });
+
+      test('is false before the limit', () {
+        expect(
+          parse(totalCount: 5000, itemCount: 30, page: 33).reachedSearchLimit,
+          isFalse,
+        );
+      });
+
+      // total_count can overstate what GitHub returns; an empty page ends
+      // paging without reaching the limit, wherever it comes.
+      test('is false when the page at the limit is empty', () {
+        expect(
+          parse(totalCount: 5000, itemCount: 0, page: 34).reachedSearchLimit,
+          isFalse,
+        );
+      });
+
+      test('is false when an earlier page is empty', () {
+        expect(
+          parse(totalCount: 5000, itemCount: 0, page: 2).reachedSearchLimit,
+          isFalse,
+        );
+      });
+
+      test('is false when every match fits within the limit', () {
+        expect(
+          parse(totalCount: 1000, itemCount: 10, page: 34).reachedSearchLimit,
+          isFalse,
+        );
       });
     });
 

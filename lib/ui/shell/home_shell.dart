@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 
+import '../search/search_screen.dart';
 import 'app_bottom_navigation.dart';
 import 'app_tab.dart';
 
@@ -17,9 +18,14 @@ class HomeShell extends HookWidget {
     return Scaffold(
       body: IndexedStack(
         index: currentTab.value.index,
-        children: AppTab.values.map((tab) {
-          return Container(); // Replace with your actual tab content
-        }).toList(),
+        children: [
+          for (final tab in AppTab.values)
+            switch (tab) {
+              // Opening a repository comes with the detail screen.
+              AppTab.search => SearchScreen(onRepoTap: (_) {}),
+              AppTab.favorites => Container(),
+            },
+        ],
       ),
       bottomNavigationBar: AppBottomNavigation(
         currentTab: currentTab.value,

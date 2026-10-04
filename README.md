@@ -33,7 +33,7 @@ flutter run            # pick a simulator/emulator, or pass -d <device-id>
 
 ## GitHub API
 
-The app calls two public endpoints of the [GitHub REST API](https://docs.github.com/en/rest) through `GitHubApiClient` (`lib/data/github/`). Requests are unauthenticated, so there is no token to configure. Every request sends `Accept: application/vnd.github+json` and `X-GitHub-Api-Version: 2022-11-28` and times out after 15 seconds.
+The app calls two public endpoints of the [GitHub REST API](https://docs.github.com/en/rest) through `GitHubApiClient` (`lib/data/github/`). Requests are unauthenticated, so there is no token to configure. Every request sends `Accept: application/vnd.github+json` and `X-GitHub-Api-Version: 2022-11-28` and times out after 15 seconds. Response bodies are decoded as UTF-8, as JSON requires, whatever the `content-type` header says.
 
 ### Search repositories
 
@@ -42,8 +42,8 @@ The app calls two public endpoints of the [GitHub REST API](https://docs.github.
 | Parameter | Value |
 |---|---|
 | `q` | The search box text. A blank query is rejected before sending, since GitHub answers it with 422; the screen shows its home state instead. |
-| `page` | 1 to 34. Pages past the 1000-result limit are rejected before sending. |
-| `per_page` | 30 |
+| `page` | 1 to 10. Pages past the 1000-result limit are rejected before sending. |
+| `per_page` | 100, the most GitHub allows, so scrolling spends as few of the 10 searches a minute as possible |
 
 Fields used from each item (`GitHubRepo`):
 
@@ -87,6 +87,48 @@ ProviderScope(
   child: const MyApp(),
 );
 ```
+
+## Search Screen
+
+The Search tab (`lib/ui/search/`) searches repositories by keyword. Its state is in `lib/state/search_query_notifier.dart` and `lib/state/search_results_notifier.dart`.
+
+### States
+
+| State | When |
+|---|---|
+| Home | The search box is empty or blank. Deleting the text returns here at once. |
+| Loading | The first page of a search is loading, or a failed search is being retried. |
+| Results | Each row shows the owner avatar, `full_name` and a star button. |
+| No results | GitHub found nothing for the keyword. |
+| Error | The search failed. The message comes from the error type (no connection, rate limited, ...), with a Retry button. When rate limited, it says when to try again if GitHub sent a time. |
+
+### When it searches
+
+- **Only when the keyboard's search key is pressed**, not while typing. Unauthenticated clients get 10 searches a minute, which typing would use up in a few words.
+- **No automatic retries.** Riverpod retries failed providers by default, which would also spend the 10 searches; the user retries instead.
+- **One result set per keyword.** `searchResultsProvider` is an `autoDispose` family keyed by the keyword, so a new search starts empty and never shows the previous keyword's results. A keyword's results are dropped once the screen stops showing them.
+
+### Pagination
+
+`SearchResultsNotifier.loadNextPage()` appends the next page (100 results), and the list calls it as rows are built:
+
+- **When:** once one of the last 50 rows (half a page) is built, several screens before the end, so the next page arrives before even a fast scroll gets there. Checking as rows are built, rather than on scroll, also loads more when the first page doesn't fill the screen.
+- **At most one request at a time.** `loadNextPage` does nothing while a page or the search itself is loading, so the list can call it freely.
+- **Failed pages.** The loaded results stay, and the end of the list shows the error with a Retry button. Scrolling doesn't request the page again; only Retry does.
+- **Duplicates.** Results can shift between requests, so a page may repeat a repository; it is skipped.
+- **Stale pages.** A page that arrives after the search reloaded is dropped.
+- **The 1,000-result limit.** GitHub returns at most 1,000 results per search. When paging stops there while `total_count` is larger, the end of the list says only the first 1,000 results are shown and suggests a more specific search.
+- **The end.** Once every result has been loaded, the end of the list says there are no more results.
+
+### Avatars
+
+`RepoAvatar` asks GitHub's avatar host for an image the size it is shown (the `s` parameter) and decodes it at that size, instead of the default 460 pixels. A placeholder shows while it loads, if it fails, or when a repository has no owner.
+
+### Testing the screen
+
+- `test/fixtures/` holds a real Search API response for `flutter` and its owners' avatars, saved by `dart run tool/fetch_search_fixtures.dart`. The parser and the golden tests use it.
+- `withAvatarFixtures` (`test/helpers/avatars.dart`) makes `Image.network` load those avatars instead of the network, through Flutter's `debugNetworkImageHttpClientProvider`, so goldens show real images.
+- Golden tests cover the results, no results and rate limited states, and both ends of the list (every result shown, and the 1,000-result limit), at every device size.
 
 ## Favorites
 

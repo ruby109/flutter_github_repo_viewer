@@ -26,8 +26,10 @@ class GitHubApiClient {
 
   static const defaultTimeout = Duration(seconds: 15);
 
-  /// Results requested per search page.
-  static const perPage = 30;
+  /// Results requested per search page: the most GitHub allows, so
+  /// scrolling through results spends as few of the 10 searches a minute as
+  /// possible.
+  static const perPage = 100;
 
   /// The last page within the Search API's [SearchPage.maxResults] limit;
   /// later pages fail with 422.
@@ -101,7 +103,9 @@ class GitHubApiClient {
         throw HttpStatusException(statusCode);
     }
     try {
-      return switch (jsonDecode(response.body)) {
+      // JSON is always UTF-8; `response.body` would fall back to Latin-1
+      // when the content-type isn't application/json and has no charset.
+      return switch (jsonDecode(utf8.decode(response.bodyBytes))) {
         final Map<String, Object?> json => parse(json),
         final other => throw FormatException('Expected a JSON object', other),
       };
