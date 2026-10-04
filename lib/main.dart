@@ -1,26 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
-import 'data/preferences/shared_preferences_provider.dart';
-import 'state/favorites_notifier.dart';
 import 'ui/shell/home_shell.dart';
+import 'ui/startup/app_startup_widget.dart';
 
-Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  // Loaded before runApp so favorites are read synchronously from then on.
-  final preferences = await SharedPreferencesWithCache.create(
-    cacheOptions: const SharedPreferencesWithCacheOptions(
-      allowList: {FavoritesNotifier.storageKey},
-    ),
-  );
-
-  runApp(
-    ProviderScope(
-      overrides: [sharedPreferencesProvider.overrideWithValue(preferences)],
-      child: const MyApp(),
-    ),
-  );
+void main() {
+  // Runs the app at once: AppStartupWidget loads the preferences, so a failed
+  // load shows an error with Retry instead of leaving the native launch
+  // screen up forever.
+  runApp(const ProviderScope(child: MyApp()));
 }
 
 class MyApp extends StatelessWidget {
@@ -31,7 +19,8 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'GitHub Repo Viewer',
       theme: ThemeData(colorScheme: .fromSeed(seedColor: Colors.deepPurple)),
-      home: const HomeShell(),
+      // Inside MaterialApp, so the startup error uses the app's theme.
+      home: const AppStartupWidget(child: HomeShell()),
     );
   }
 }
