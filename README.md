@@ -98,7 +98,7 @@ The Search tab (`lib/ui/search/`) searches repositories by keyword. Its state is
 |---|---|
 | Home | The search box is empty or blank. Deleting the text returns here at once. |
 | Loading | The first page of a search is loading, or a failed search is being retried. |
-| Results | Each row shows the owner avatar, `full_name` and a star button. |
+| Results | Each row shows the owner avatar, `full_name` and a star button. Tapping a row opens its [details](#detail-screen). |
 | No results | GitHub found nothing for the keyword. |
 | Error | The search failed. The message comes from the error type (no connection, rate limited, ...), with a Retry button. When rate limited, it says when to try again if GitHub sent a time. |
 
@@ -128,7 +128,17 @@ The Search tab (`lib/ui/search/`) searches repositories by keyword. Its state is
 
 - `test/fixtures/` holds a real Search API response for `flutter`, the Repository API response for its first result, and their owners' avatars, saved by `dart run tool/fetch_fixtures.dart`. The parsers and the golden tests use them.
 - `withAvatarFixtures` (`test/helpers/avatars.dart`) makes `Image.network` load those avatars instead of the network, through Flutter's `debugNetworkImageHttpClientProvider`, so goldens show real images.
-- Golden tests cover the results, no results and rate limited states, and both ends of the list (every result shown, and the 1,000-result limit), at every device size.
+- Golden tests cover the results, no results and rate limited states, and both ends of the list (every result shown, and the 1,000-result limit), at every device size. The detail screen has goldens for loaded, loading, rate limited and not found.
+
+## Detail Screen
+
+Tapping a search result pushes `RepoDetailScreen` (`lib/ui/detail/`) over the tabs; its back button returns to the list where it was left.
+
+- **Shown at once:** the owner avatar (96 pixels), `full_name` and the star button come from the search result, so they don't wait for the network.
+- **Loaded:** `subscribers_count` comes from the Repository API through `repoDetailProvider` (`lib/state/repo_detail_provider.dart`), an `autoDispose` family keyed by full name, so reopening a repository loads its latest count. Like search, it never retries on its own: unauthenticated clients get 60 of these requests an hour.
+- **States of the subscriber count:** a loading indicator; the count with thousands separators; or the error with a Retry button. A deleted repository (404) says it no longer exists and offers no retry, since retrying can't bring it back. The rest of the screen, including the star, stays usable.
+- **Stars stay in sync:** the star button watches the same `isStarredProvider(id)` as the list rows, so starring here shows in the list on returning, without reloading anything.
+- **Wide screens:** the content is at most 560 pixels wide, centered, so it stays readable on an iPad.
 
 ## Favorites
 
