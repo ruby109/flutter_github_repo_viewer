@@ -1,5 +1,6 @@
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../data/github/github_api_client.dart';
 import '../data/github/github_api_exception.dart';
 import '../data/github/github_providers.dart';
 import '../data/github/github_repo.dart';
@@ -52,7 +53,13 @@ class SearchResults {
 
   /// Whether paging stopped at the Search API's result limit although more
   /// repositories match.
-  bool get reachedSearchLimit => !hasMore && totalCount > SearchPage.maxResults;
+  ///
+  /// Requires the last page: paging also stops early at an empty page when
+  /// `total_count` overstates what GitHub returns.
+  bool get reachedSearchLimit =>
+      !hasMore &&
+      page >= GitHubApiClient.maxPage &&
+      totalCount > SearchPage.maxResults;
 }
 
 class SearchResultsNotifier extends AsyncNotifier<SearchResults> {

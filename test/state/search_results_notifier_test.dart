@@ -6,6 +6,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import 'package:github_repo_viewer/data/github/github_api_client.dart';
 import 'package:github_repo_viewer/data/github/github_api_exception.dart';
 import 'package:github_repo_viewer/data/github/github_providers.dart';
 import 'package:github_repo_viewer/data/github/github_repo.dart';
@@ -354,17 +355,31 @@ void main() {
     });
 
     group('reachedSearchLimit', () {
-      SearchResults results({required int totalCount, required bool hasMore}) =>
-          SearchResults(
-            items: [GitHubRepo.fromJson(repoJson())],
-            totalCount: totalCount,
-            hasMore: hasMore,
-          );
+      SearchResults results({
+        required int totalCount,
+        required bool hasMore,
+        int page = GitHubApiClient.maxPage,
+      }) => SearchResults(
+        items: [GitHubRepo.fromJson(repoJson())],
+        totalCount: totalCount,
+        hasMore: hasMore,
+        page: page,
+      );
 
-      test('is true when paging stopped with more matches left', () {
+      test('is true when paging stopped at the last page with more matches '
+          'left', () {
         expect(
           results(totalCount: 5000, hasMore: false).reachedSearchLimit,
           isTrue,
+        );
+      });
+
+      // An empty page ends paging early when total_count overstates what
+      // GitHub returns; that isn't the 1,000-result limit.
+      test('is false when paging stopped before the last page', () {
+        expect(
+          results(totalCount: 5000, hasMore: false, page: 2).reachedSearchLimit,
+          isFalse,
         );
       });
 

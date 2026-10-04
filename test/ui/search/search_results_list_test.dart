@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import 'package:github_repo_viewer/data/github/github_api_client.dart';
 import 'package:github_repo_viewer/data/github/github_api_exception.dart';
 import 'package:github_repo_viewer/data/github/github_repo.dart';
 import 'package:github_repo_viewer/data/github/search_page.dart';
@@ -218,6 +219,7 @@ void main() {
             items: repos,
             totalCount: 5000,
             hasMore: false,
+            page: GitHubApiClient.maxPage,
           ),
         );
 
@@ -269,6 +271,7 @@ void main() {
                 items: fixture.items,
                 totalCount: totalCount,
                 hasMore: false,
+                page: GitHubApiClient.maxPage,
               ),
             );
             await tester.drag(find.byType(ListView), const Offset(0, -2000));
