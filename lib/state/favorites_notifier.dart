@@ -13,6 +13,20 @@ final favoritesProvider = NotifierProvider<FavoritesNotifier, List<GitHubRepo>>(
   FavoritesNotifier.new,
 );
 
+/// The ids of the starred repositories, for constant-time lookups.
+final starredIdsProvider = Provider<Set<int>>(
+  (ref) => {for (final repo in ref.watch(favoritesProvider)) repo.id},
+);
+
+/// Whether the repository with this id is starred.
+///
+/// Notifies only when this repository's star changes, so a list row
+/// watching it doesn't rebuild when another row is starred. Disposed once
+/// no row watches it, so ids scrolled past don't accumulate.
+final isStarredProvider = Provider.autoDispose.family<bool, int>(
+  (ref, id) => ref.watch(starredIdsProvider).contains(id),
+);
+
 class FavoritesNotifier extends Notifier<List<GitHubRepo>> {
   /// The preferences key holding the favorites as a JSON array.
   static const storageKey = 'favorites';

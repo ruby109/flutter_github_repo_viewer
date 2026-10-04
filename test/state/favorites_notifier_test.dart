@@ -18,6 +18,9 @@ void main() {
     );
   }
 
+  GitHubRepo repoWithId(int id) =>
+      GitHubRepo.fromJson(repoJson(id: id, fullName: 'owner/r$id'));
+
   group('FavoritesNotifier', () {
     /// A container whose preferences start with [data].
     Future<ProviderContainer> containerWith([
@@ -30,9 +33,6 @@ void main() {
     Future<ProviderContainer> restart() async {
       return containerFor(await reopenPreferences());
     }
-
-    GitHubRepo repo(int id) =>
-        GitHubRepo.fromJson(repoJson(id: id, fullName: 'owner/r$id'));
 
     Iterable<String> fullNames(List<GitHubRepo> repos) =>
         repos.map((repo) => repo.fullName);
@@ -67,8 +67,8 @@ void main() {
         final container = await containerWith();
         final notifier = container.read(favoritesProvider.notifier);
 
-        await notifier.toggle(repo(1));
-        await notifier.toggle(repo(2));
+        await notifier.toggle(repoWithId(1));
+        await notifier.toggle(repoWithId(2));
 
         expect(fullNames(container.read(favoritesProvider)), [
           'owner/r2',
@@ -79,10 +79,10 @@ void main() {
       test('unstars a starred repository', () async {
         final container = await containerWith();
         final notifier = container.read(favoritesProvider.notifier);
-        await notifier.toggle(repo(1));
-        await notifier.toggle(repo(2));
+        await notifier.toggle(repoWithId(1));
+        await notifier.toggle(repoWithId(2));
 
-        await notifier.toggle(repo(1));
+        await notifier.toggle(repoWithId(1));
 
         expect(fullNames(container.read(favoritesProvider)), ['owner/r2']);
       });
@@ -92,7 +92,7 @@ void main() {
       test('matches repositories by id', () async {
         final container = await containerWith();
         final notifier = container.read(favoritesProvider.notifier);
-        await notifier.toggle(repo(1));
+        await notifier.toggle(repoWithId(1));
 
         await notifier.toggle(
           const GitHubRepo(id: 1, fullName: 'owner/renamed', owner: null),
@@ -106,7 +106,7 @@ void main() {
 
         final saving = container
             .read(favoritesProvider.notifier)
-            .toggle(repo(1));
+            .toggle(repoWithId(1));
 
         expect(fullNames(container.read(favoritesProvider)), ['owner/r1']);
         await saving;
@@ -115,26 +115,88 @@ void main() {
       test('persists stars across restarts', () async {
         final container = await containerWith();
         final notifier = container.read(favoritesProvider.notifier);
-        await notifier.toggle(repo(1));
-        await notifier.toggle(repo(2));
+        await notifier.toggle(repoWithId(1));
+        await notifier.toggle(repoWithId(2));
 
         final restarted = await restart();
 
         final favorites = restarted.read(favoritesProvider);
         expect(fullNames(favorites), ['owner/r2', 'owner/r1']);
-        expect(favorites.first.owner?.avatarUrl, repo(2).owner?.avatarUrl);
+        expect(
+          favorites.first.owner?.avatarUrl,
+          repoWithId(2).owner?.avatarUrl,
+        );
       });
 
       test('persists unstars across restarts', () async {
         final container = await containerWith();
         final notifier = container.read(favoritesProvider.notifier);
-        await notifier.toggle(repo(1));
-        await notifier.toggle(repo(1));
+        await notifier.toggle(repoWithId(1));
+        await notifier.toggle(repoWithId(1));
 
         final restarted = await restart();
 
         expect(restarted.read(favoritesProvider), isEmpty);
       });
+    });
+  });
+
+  group('starredIdsProvider', () {
+    test('holds the ids of the starred repositories', () async {
+      final container = containerFor(await inMemoryPreferences());
+      final notifier = container.read(favoritesProvider.notifier);
+
+      await notifier.toggle(repoWithId(1));
+      await notifier.toggle(repoWithId(2));
+
+      expect(container.read(starredIdsProvider), {1, 2});
+    });
+  });
+
+  group('isStarredProvider', () {
+    test('follows starring and unstarring', () async {
+      final container = containerFor(await inMemoryPreferences());
+      final notifier = container.read(favoritesProvider.notifier);
+      final listener = container.listen(isStarredProvider(1), (_, _) {});
+
+      expect(listener.read(), isFalse);
+      await notifier.toggle(repoWithId(1));
+      expect(listener.read(), isTrue);
+      await notifier.toggle(repoWithId(1));
+      expect(listener.read(), isFalse);
+    });
+
+    // Each row watches only its own repository, so starring one row
+    // doesn't rebuild the others.
+    test('notifies only when that repository changes', () async {
+      final container = containerFor(await inMemoryPreferences());
+      final notifier = container.read(favoritesProvider.notifier);
+      final changes = <bool>[];
+      container.listen(
+        isStarredProvider(1),
+        (_, isStarred) => changes.add(isStarred),
+      );
+
+      // Dependent providers recompute when Riverpod flushes its scheduler.
+      for (final id in [2, 1, 3]) {
+        await notifier.toggle(repoWithId(id));
+        await container.pump();
+      }
+
+      expect(changes, [true]);
+    });
+
+    // Rows scrolled out of view stop listening; their providers must not
+    // pile up as the user scrolls through search results.
+    test('is disposed when no longer listened to', () async {
+      final container = containerFor(await inMemoryPreferences());
+      final subscription = container.listen(isStarredProvider(1), (_, _) {});
+      expect(container.exists(isStarredProvider(1)), isTrue);
+
+      subscription.close();
+      await container.pump();
+
+      expect(container.exists(isStarredProvider(1)), isFalse);
     });
   });
 }
