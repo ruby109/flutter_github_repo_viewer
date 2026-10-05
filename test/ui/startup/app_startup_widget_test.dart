@@ -15,10 +15,12 @@ void main() {
   group('AppStartupWidget', () {
     Future<void> pumpStartup(WidgetTester tester) async {
       await tester.pumpWidget(
-        const ProviderScope(
+        ProviderScope(
           child: MaterialApp(
             debugShowCheckedModeBanner: false,
-            home: AppStartupWidget(child: Text('app')),
+            theme: goldenTheme,
+            darkTheme: goldenDarkTheme,
+            home: const AppStartupWidget(child: Text('app')),
           ),
         ),
       );
@@ -182,20 +184,23 @@ void main() {
 
     group('golden', () {
       for (final device in goldenDevices) {
-        testGoldens('error', device, (tester) async {
-          final (_, store) = await controlledPreferences();
-          store.readError = Exception('corrupt file');
+        for (final brightness in Brightness.values) {
+          testGoldens('error', device, brightness: brightness, (tester) async {
+            final (_, store) = await controlledPreferences();
+            store.readError = Exception('corrupt file');
 
-          await pumpStartup(tester);
-          await tester.pump();
+            await pumpStartup(tester);
+            await tester.pump();
 
-          await expectLater(
-            find.byType(AppStartupWidget),
-            matchesGoldenFile(
-              'goldens/app_startup_widget_error_${device.name}.png',
-            ),
-          );
-        });
+            await expectLater(
+              find.byType(AppStartupWidget),
+              matchesGoldenFile(
+                'goldens/app_startup_widget_error'
+                '${goldenModeSuffix(brightness)}_${device.name}.png',
+              ),
+            );
+          });
+        }
       }
     });
   });

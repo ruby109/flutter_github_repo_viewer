@@ -42,6 +42,8 @@ void main() {
           container: container,
           child: MaterialApp(
             debugShowCheckedModeBanner: false,
+            theme: goldenTheme,
+            darkTheme: goldenDarkTheme,
             home: StarsScreen(onRepoTap: onRepoTap ?? (_) {}),
           ),
         ),
@@ -126,26 +128,31 @@ void main() {
 
     group('golden', () {
       for (final device in goldenDevices) {
-        testGoldens('starred', device, (tester) async {
-          // Real search results, starred.
-          final starred = (searchFixture()['items']! as List<Object?>)
-              .take(6)
-              .cast<Map<String, Object?>>()
-              .map(GitHubRepo.fromJson)
-              .toList();
+        for (final brightness in Brightness.values) {
+          testGoldens('starred', device, brightness: brightness, (
+            tester,
+          ) async {
+            // Real search results, starred.
+            final starred = (searchFixture()['items']! as List<Object?>)
+                .take(6)
+                .cast<Map<String, Object?>>()
+                .map(GitHubRepo.fromJson)
+                .toList();
 
-          await withAvatarFixtures((_) async {
-            await pumpScreen(tester, stored: starred);
-            await loadImages(tester);
+            await withAvatarFixtures((_) async {
+              await pumpScreen(tester, stored: starred);
+              await loadImages(tester);
 
-            await expectLater(
-              find.byType(StarsScreen),
-              matchesGoldenFile(
-                'goldens/stars_screen_starred_${device.name}.png',
-              ),
-            );
+              await expectLater(
+                find.byType(StarsScreen),
+                matchesGoldenFile(
+                  'goldens/stars_screen_starred'
+                  '${goldenModeSuffix(brightness)}_${device.name}.png',
+                ),
+              );
+            });
           });
-        });
+        }
 
         testGoldens('empty', device, (tester) async {
           await pumpScreen(tester);

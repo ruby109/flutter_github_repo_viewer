@@ -289,6 +289,8 @@ void main() {
             // button.
             child: MaterialApp(
               debugShowCheckedModeBanner: false,
+              theme: goldenTheme,
+              darkTheme: goldenDarkTheme,
               initialRoute: '/detail',
               routes: {
                 '/': (_) => const SizedBox.shrink(),
@@ -310,22 +312,27 @@ void main() {
       }
 
       for (final device in goldenDevices) {
-        testGoldens('loaded', device, (tester) async {
-          await withAvatarFixtures((_) async {
-            await pumpFixture(
-              tester,
-              () async => http.Response.bytes(
-                utf8.encode(jsonEncode(repoDetailFixture())),
-                200,
-                headers: {'content-type': 'application/json; charset=utf-8'},
-              ),
-            );
-            await tester.pump();
-            await loadImages(tester);
+        for (final brightness in Brightness.values) {
+          testGoldens('loaded', device, brightness: brightness, (tester) async {
+            await withAvatarFixtures((_) async {
+              await pumpFixture(
+                tester,
+                () async => http.Response.bytes(
+                  utf8.encode(jsonEncode(repoDetailFixture())),
+                  200,
+                  headers: {'content-type': 'application/json; charset=utf-8'},
+                ),
+              );
+              await tester.pump();
+              await loadImages(tester);
 
-            await expectGolden('loaded', device);
+              await expectGolden(
+                'loaded${goldenModeSuffix(brightness)}',
+                device,
+              );
+            });
           });
-        });
+        }
 
         testGoldens('loading', device, (tester) async {
           final response = Completer<http.Response>();

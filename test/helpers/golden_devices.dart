@@ -1,6 +1,7 @@
-import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'package:github_repo_viewer/ui/app_theme.dart';
 
 /// Tag for golden tests. They only run on CI (Linux), because font rendering
 /// differs between operating systems; see `.github/workflows/golden.yml`.
@@ -57,17 +58,24 @@ const goldenDevices = [
   ),
 ];
 
-/// Defines a golden test that renders at [device].
+/// Defines a golden test that renders at [device], in the system's light or
+/// dark mode ([brightness]).
 ///
 /// The test is tagged [goldenTag] and draws real shadows; flutter_test
-/// otherwise paints elevation as solid black bands.
+/// otherwise paints elevation as solid black bands. Widgets under test should
+/// use the app's themes ([goldenTheme] and [goldenDarkTheme]) so the system
+/// brightness picks one, as in the app.
 void testGoldens(
   String description,
   GoldenDevice device,
-  WidgetTesterCallback callback,
-) {
-  testWidgets('$description on ${device.name}', (tester) async {
+  WidgetTesterCallback callback, {
+  Brightness brightness = Brightness.light,
+}) {
+  final mode = brightness == Brightness.dark ? ' in dark mode' : '';
+  testWidgets('$description on ${device.name}$mode', (tester) async {
     _useDevice(tester, device);
+    tester.platformDispatcher.platformBrightnessTestValue = brightness;
+    addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
     debugDisableShadows = false;
     try {
       await callback(tester);
@@ -77,6 +85,14 @@ void testGoldens(
     }
   }, tags: goldenTag);
 }
+
+/// Ends golden file names for dark mode, e.g. `stars_screen_starred_dark_ipad.png`.
+String goldenModeSuffix(Brightness brightness) =>
+    brightness == Brightness.dark ? '_dark' : '';
+
+/// The app's themes, for `MaterialApp.theme` and `darkTheme` in golden tests.
+final goldenTheme = AppTheme.light;
+final goldenDarkTheme = AppTheme.dark;
 
 void _useDevice(WidgetTester tester, GoldenDevice device) {
   final insets = device.safeArea * device.pixelRatio;

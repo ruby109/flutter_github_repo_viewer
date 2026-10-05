@@ -39,6 +39,8 @@ void main() {
           overrides: [sharedPreferencesProvider.overrideWithValue(preferences)],
           child: MaterialApp(
             debugShowCheckedModeBanner: false,
+            theme: goldenTheme,
+            darkTheme: goldenDarkTheme,
             home: Scaffold(
               body: SearchResultsList(
                 results:

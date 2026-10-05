@@ -166,6 +166,8 @@ void main() {
             ],
             child: MaterialApp(
               debugShowCheckedModeBanner: false,
+              theme: goldenTheme,
+              darkTheme: goldenDarkTheme,
               home: SearchScreen(onRepoTap: (_) {}),
             ),
           ),
@@ -189,25 +191,33 @@ void main() {
       }
 
       for (final device in goldenDevices) {
-        testGoldens('results', device, (tester) async {
-          // Only the fixture's 20 results, so no more are loading.
-          final fixture = searchFixture()..['total_count'] = 20;
+        for (final brightness in Brightness.values) {
+          testGoldens('results', device, brightness: brightness, (
+            tester,
+          ) async {
+            // Only the fixture's 20 results, so no more are loading.
+            final fixture = searchFixture()..['total_count'] = 20;
 
-          await withAvatarFixtures((_) async {
-            // Encoded as GitHub does: the descriptions aren't all Latin-1.
-            await pumpSearched(
-              tester,
-              http.Response.bytes(
-                utf8.encode(jsonEncode(fixture)),
-                200,
-                headers: {'content-type': 'application/json; charset=utf-8'},
-              ),
-            );
-            await loadImages(tester);
+            await withAvatarFixtures((_) async {
+              // Encoded as GitHub does: the descriptions aren't all Latin-1.
+              await pumpSearched(
+                tester,
+                http.Response.bytes(
+                  utf8.encode(jsonEncode(fixture)),
+                  200,
+                  headers: {'content-type': 'application/json; charset=utf-8'},
+                ),
+              );
+              await loadImages(tester);
 
-            await expectGolden(tester, 'results', device);
+              await expectGolden(
+                tester,
+                'results${goldenModeSuffix(brightness)}',
+                device,
+              );
+            });
           });
-        });
+        }
 
         testGoldens('no results', device, (tester) async {
           await pumpSearched(

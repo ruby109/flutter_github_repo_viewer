@@ -350,9 +350,11 @@ void main() {
                     await inMemoryPreferences(),
                   ),
                 ],
-                child: const MaterialApp(
+                child: MaterialApp(
                   debugShowCheckedModeBanner: false,
-                  home: HomeShell(),
+                  theme: goldenTheme,
+                  darkTheme: goldenDarkTheme,
+                  home: const HomeShell(),
                 ),
               ),
             );
