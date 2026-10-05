@@ -30,6 +30,7 @@ void main() {
     }) async {
       final container = ProviderContainer.test(
         overrides: [
+          AvatarFixtures().override,
           sharedPreferencesProvider.overrideWithValue(
             await inMemoryPreferences({
               FavoritesNotifier.storageKey: jsonEncode(stored),
@@ -139,18 +140,16 @@ void main() {
                 .map(GitHubRepo.fromJson)
                 .toList();
 
-            await withAvatarFixtures((_) async {
-              await pumpScreen(tester, stored: starred);
-              await loadImages(tester);
+            await pumpScreen(tester, stored: starred);
+            await loadImages(tester);
 
-              await expectLater(
-                find.byType(StarsScreen),
-                matchesGoldenFile(
-                  'goldens/stars_screen_starred'
-                  '${goldenModeSuffix(brightness)}_${device.name}.png',
-                ),
-              );
-            });
+            await expectLater(
+              find.byType(StarsScreen),
+              matchesGoldenFile(
+                'goldens/stars_screen_starred'
+                '${goldenModeSuffix(brightness)}_${device.name}.png',
+              ),
+            );
           });
         }
 

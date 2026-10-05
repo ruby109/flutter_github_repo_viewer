@@ -24,6 +24,7 @@ void main() {
     Future<ProviderContainer> pumpScreen(WidgetTester tester) async {
       final container = ProviderContainer.test(
         overrides: [
+          AvatarFixtures().override,
           sharedPreferencesProvider.overrideWithValue(
             await inMemoryPreferences(),
           ),
@@ -159,6 +160,7 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
+              AvatarFixtures().override,
               sharedPreferencesProvider.overrideWithValue(preferences),
               httpClientProvider.overrideWithValue(
                 MockClient((_) async => response),
@@ -198,24 +200,22 @@ void main() {
             // Only the fixture's 20 results, so no more are loading.
             final fixture = searchFixture()..['total_count'] = 20;
 
-            await withAvatarFixtures((_) async {
-              // Encoded as GitHub does: the descriptions aren't all Latin-1.
-              await pumpSearched(
-                tester,
-                http.Response.bytes(
-                  utf8.encode(jsonEncode(fixture)),
-                  200,
-                  headers: {'content-type': 'application/json; charset=utf-8'},
-                ),
-              );
-              await loadImages(tester);
+            // Encoded as GitHub does: the descriptions aren't all Latin-1.
+            await pumpSearched(
+              tester,
+              http.Response.bytes(
+                utf8.encode(jsonEncode(fixture)),
+                200,
+                headers: {'content-type': 'application/json; charset=utf-8'},
+              ),
+            );
+            await loadImages(tester);
 
-              await expectGolden(
-                tester,
-                'results${goldenModeSuffix(brightness)}',
-                device,
-              );
-            });
+            await expectGolden(
+              tester,
+              'results${goldenModeSuffix(brightness)}',
+              device,
+            );
           });
         }
 

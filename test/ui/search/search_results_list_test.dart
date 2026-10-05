@@ -37,7 +37,10 @@ void main() {
       final preferences = await inMemoryPreferences();
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [sharedPreferencesProvider.overrideWithValue(preferences)],
+          overrides: [
+            AvatarFixtures().override,
+            sharedPreferencesProvider.overrideWithValue(preferences),
+          ],
           child: MaterialApp(
             debugShowCheckedModeBanner: false,
             theme: goldenTheme,
@@ -280,27 +283,25 @@ void main() {
             perPage: 20,
           );
 
-          await withAvatarFixtures((_) async {
-            await pumpList(
-              tester,
-              results: SearchResults(
-                items: fixture.items,
-                totalCount: totalCount,
-                hasMore: false,
-                reachedSearchLimit: reachedSearchLimit,
-              ),
-            );
-            await tester.drag(find.byType(ListView), const Offset(0, -2000));
-            await tester.pumpAndSettle();
-            await loadImages(tester);
+          await pumpList(
+            tester,
+            results: SearchResults(
+              items: fixture.items,
+              totalCount: totalCount,
+              hasMore: false,
+              reachedSearchLimit: reachedSearchLimit,
+            ),
+          );
+          await tester.drag(find.byType(ListView), const Offset(0, -2000));
+          await tester.pumpAndSettle();
+          await loadImages(tester);
 
-            await expectLater(
-              find.byType(SearchResultsList),
-              matchesGoldenFile(
-                'goldens/search_results_list_${name}_${device.name}.png',
-              ),
-            );
-          });
+          await expectLater(
+            find.byType(SearchResultsList),
+            matchesGoldenFile(
+              'goldens/search_results_list_${name}_${device.name}.png',
+            ),
+          );
         }
 
         testGoldens('search limit reached', device, (tester) async {

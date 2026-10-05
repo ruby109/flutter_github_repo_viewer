@@ -1,10 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+
+import '../../data/avatars/avatar_providers.dart';
+import 'cached_avatar_image.dart';
 
 /// A repository owner's avatar, or a placeholder when there is none or it
 /// fails to load.
 ///
+/// Loaded through the disk cache ([avatarCacheProvider]), so avatars seen
+/// before show after a restart and offline.
+///
 /// Decorative: the repository name next to it identifies the repository.
-class RepoAvatar extends StatelessWidget {
+class RepoAvatar extends ConsumerWidget {
   const RepoAvatar({super.key, required this.url, this.size = 40});
 
   /// The owner's `avatar_url`; null when the repository has no owner.
@@ -18,7 +25,7 @@ class RepoAvatar extends StatelessWidget {
   static const _gitHubAvatarHost = 'avatars.githubusercontent.com';
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final placeholder = _Placeholder(size: size);
     final url = this.url;
     if (url == null) return placeholder;
@@ -28,13 +35,18 @@ class RepoAvatar extends StatelessWidget {
     final pixels = (size * MediaQuery.devicePixelRatioOf(context)).ceil();
     return ExcludeSemantics(
       child: ClipOval(
-        child: Image.network(
-          _sized(url, pixels),
+        child: Image(
+          image: ResizeImage(
+            CachedAvatarImage(
+              Uri.parse(_sized(url, pixels)),
+              ref.watch(avatarCacheProvider),
+            ),
+            width: pixels,
+            height: pixels,
+          ),
           width: size,
           height: size,
           fit: BoxFit.cover,
-          cacheWidth: pixels,
-          cacheHeight: pixels,
           frameBuilder: (context, child, frame, wasSynchronouslyLoaded) =>
               frame == null && !wasSynchronouslyLoaded ? placeholder : child,
           errorBuilder: (context, error, stackTrace) => placeholder,

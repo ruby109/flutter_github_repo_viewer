@@ -13,6 +13,7 @@ import 'package:github_repo_viewer/data/preferences/shared_preferences_provider.
 import 'package:github_repo_viewer/ui/search/search_results_list.dart';
 import 'package:github_repo_viewer/ui/search/search_results_view.dart';
 
+import '../../helpers/avatars.dart';
 import '../../helpers/github_json.dart';
 import '../../helpers/preferences.dart';
 
@@ -31,6 +32,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            AvatarFixtures().override,
             sharedPreferencesProvider.overrideWithValue(preferences),
             httpClientProvider.overrideWithValue(
               MockClient((request) {
