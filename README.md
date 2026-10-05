@@ -31,6 +31,103 @@ flutter pub get
 flutter run            # pick a simulator/emulator, or pass -d <device-id>
 ```
 
+## Key Implementation Points
+
+### Architecture
+
+Three layers, each depending only on the one below it:
+
+| Layer | Folder | Contains |
+|---|---|---|
+| Data | `lib/data/` | `GitHubApiClient` and its sealed `GitHubApiException`s, the models (`GitHubRepo`, `SearchPage`, `RepoDetail`), and the preferences loader. No widgets and no app state. |
+| State | `lib/state/` | Riverpod providers and notifiers: the search query, search results, repository details and favorites. No widgets. |
+| UI | `lib/ui/` | One folder per screen (`search`, `detail`, `stars`, `shell`, `startup`), shared widgets in `common`, and the themes. Widgets read state through providers and never call the API or storage directly. |
+
+```
+lib/
+├── main.dart                     runApp, MyApp (themes, AppStartupWidget → HomeShell)
+├── data/
+│   ├── github/                   API client, models, exceptions, client providers
+│   └── preferences/              loading SharedPreferencesWithCache
+├── state/                        search query/results, repo detail, favorites
+└── ui/
+    ├── shell/                    HomeShell: bottom navigation, a navigator per tab
+    ├── search/  detail/  stars/  the three screens
+    ├── startup/                  AppStartupWidget: loading, error and Retry
+    ├── common/                   RepoAvatar, RepoListTile, StarButton, StatusMessage, error texts
+    └── app_theme.dart            light and dark themes
+```
+
+How the pieces connect:
+
+```mermaid
+flowchart LR
+  subgraph UI
+    SearchScreen
+    RepoDetailScreen
+    StarsScreen
+    StarButton
+  end
+  subgraph State
+    query["searchQueryProvider"]
+    results["searchResultsProvider(query)"]
+    detail["repoDetailProvider(fullName)"]
+    favorites["favoritesProvider"]
+    starred["isStarredProvider(id)"]
+  end
+  subgraph Data
+    client["GitHubApiClient"]
+    prefs["SharedPreferencesWithCache"]
+  end
+  SearchScreen --> query --> results --> client
+  RepoDetailScreen --> detail --> client
+  StarsScreen --> favorites
+  StarButton -- watches --> starred --> favorites
+  StarButton -- "toggle(repo)" --> favorites --> prefs
+```
+
+### State management
+
+[hooks_riverpod](https://pub.dev/packages/hooks_riverpod) holds all shared state; hooks only hold a widget's own short-lived state (the search box's controller, the selected tab, each tab's navigator key).
+
+| Provider | Kind | Why |
+|---|---|---|
+| `httpClientProvider`, `gitHubApiClientProvider` | `Provider` | Injects the HTTP client; tests override it with `MockClient` instead of touching the network. |
+| `sharedPreferencesLoaderProvider` | `FutureProvider`, no automatic retry | Loads the preferences once at startup; Retry on the error screen loads again. |
+| `sharedPreferencesProvider` | `Provider` | The loaded preferences, read synchronously everywhere after startup. |
+| `searchQueryProvider` | `NotifierProvider<String>` | The submitted search text; empty means the home state. |
+| `searchResultsProvider(query)` | `AsyncNotifierProvider`, `autoDispose` family, no automatic retry | One result set per keyword, so a new search never shows the previous one's results; also loads the next pages. |
+| `repoDetailProvider(fullName)` | `FutureProvider`, `autoDispose` family, no automatic retry | Fetched when a detail screen opens, dropped when it closes. |
+| `favoritesProvider` | `NotifierProvider<List<GitHubRepo>>` | The single owner of the starred list, and `toggle`. |
+| `starredIdsProvider`, `isStarredProvider(id)` | `Provider`, then an `autoDispose` family | One repository's star, so a star button rebuilds only when its own star changes. |
+
+Riverpod retries failed providers by default. That is turned off for everything that calls GitHub or storage: unauthenticated clients get 10 searches a minute and 60 other requests an hour, which silent retries would use up, so the user retries with a button instead.
+
+### How favorites stay in sync
+
+`favoritesProvider` is the only place stars live. The search list, the detail screen and the Stars tab all read it, and every star button changes it through `toggle(repo)`. The change shows on every screen at once, before it is saved; a failed save is reported in a SnackBar and the screens show what is actually stored. Details are in [Favorites](#favorites).
+
+### Navigation
+
+`HomeShell` keeps each tab in an `IndexedStack` with its own `Navigator`, so the detail screen opens within the tab, under the navigation bar, and each tab keeps its screens while another is shown. Back closes the shown tab's screens; tapping the shown tab again returns to its first screen. Details are in [Detail Screen](#detail-screen).
+
+### Edge cases
+
+| Case | What happens |
+|---|---|
+| Rate limited (10 searches a minute, 60 detail requests an hour) | An error with Retry that says when to try again, if GitHub sent a time. No automatic retries. See [Errors](#errors). |
+| More than 1,000 matches | Paging stops at GitHub's 1,000-result limit and the end of the list says so. See [Pagination](#pagination). |
+| `total_count` overstates the results, or a page repeats a repository | An empty page ends paging; repeated repositories are skipped. |
+| A page arrives after the search changed or reloaded | It is dropped. |
+| Loading the next page fails | The loaded results stay; the end of the list shows the error with Retry. |
+| Repository deleted after it was listed (404) | The detail screen says it no longer exists, without a pointless Retry. |
+| Repository without an owner (`owner: null`) | A placeholder avatar. |
+| Stored favorites corrupt or from another version | Unreadable data loads as no favorites instead of crashing; valid entries are kept. |
+| A favorite fails to save | A SnackBar says so, and the screens show what is actually stored. |
+| Preferences fail to load at startup | An error screen with Retry instead of a launch screen that never goes away. |
+| Large accessibility text, long names, tablets | Text wraps instead of overflowing; content is width-limited on wide screens. |
+| Blank or whitespace-only search | The home state; no request is sent. |
+
 ## GitHub API
 
 The app calls two public endpoints of the [GitHub REST API](https://docs.github.com/en/rest) through `GitHubApiClient` (`lib/data/github/`). Requests are unauthenticated, so there is no token to configure. Every request sends `Accept: application/vnd.github+json` and `X-GitHub-Api-Version: 2022-11-28` and times out after 15 seconds. Response bodies are decoded as UTF-8, as JSON requires, whatever the `content-type` header says.
