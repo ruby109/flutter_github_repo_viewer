@@ -62,10 +62,9 @@ class AvatarCache {
       if (stat.type == FileSystemEntityType.notFound) continue;
       if (_now().difference(stat.modified) < maxAge) return _read(file);
     }
+    final Uint8List bytes;
     try {
-      final bytes = await _download(_requestUrl(url, size));
-      await _store(avatar, size, bytes);
-      return bytes;
+      bytes = await _download(_requestUrl(url, size));
     } on Object {
       // Any size, however old, beats a placeholder.
       for (final file in [
@@ -76,6 +75,13 @@ class AvatarCache {
       }
       rethrow;
     }
+    // Caching is best effort: a full disk mustn't hide a downloaded avatar.
+    try {
+      await _store(avatar, size, bytes);
+    } on FileSystemException {
+      // Not cached this time.
+    }
+    return bytes;
   }
 
   /// Deletes every cached size of [url], e.g. because the one [load]

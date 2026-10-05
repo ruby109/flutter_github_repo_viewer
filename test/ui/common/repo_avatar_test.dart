@@ -45,6 +45,16 @@ void main() {
       expect(find.byType(Image), findsNothing);
     });
 
+    // owner.avatar_url is any string the API returned.
+    testWidgets('shows a placeholder for an avatar URL it cannot parse', (
+      tester,
+    ) async {
+      await pumpAvatar(tester, 'https://[');
+
+      expect(tester.takeException(), isNull);
+      expect(placeholder, findsOneWidget);
+    });
+
     testWidgets('shows the avatar once it loads', (tester) async {
       await pumpAvatar(tester, flutterAvatar);
 

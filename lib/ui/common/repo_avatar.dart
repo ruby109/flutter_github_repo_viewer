@@ -25,8 +25,9 @@ class RepoAvatar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final placeholder = _Placeholder(size: size);
-    final url = this.url;
-    if (url == null) return placeholder;
+    // owner.avatar_url can be any string, so it may not parse.
+    final url = Uri.tryParse(this.url ?? '');
+    if (url == null || !url.hasAuthority) return placeholder;
 
     // GitHub serves avatars at 460 pixels by default; fetch and decode only
     // the pixels shown, which keeps long result lists light on memory.
@@ -36,7 +37,7 @@ class RepoAvatar extends ConsumerWidget {
         child: Image(
           image: ResizeImage(
             CachedAvatarImage(
-              Uri.parse(url),
+              url,
               pixels: pixels,
               cache: ref.watch(avatarCacheProvider),
             ),

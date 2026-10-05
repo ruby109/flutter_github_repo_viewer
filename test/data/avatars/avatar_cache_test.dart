@@ -170,6 +170,16 @@ void main() {
       });
     });
 
+    // Caching is best effort: a full disk mustn't hide a downloaded avatar.
+    test('returns a download it cannot store', () async {
+      // A file where the cache directory should be makes every write fail.
+      directory.deleteSync(recursive: true);
+      File(directory.path).writeAsStringSync('not a directory');
+      addTearDown(() => File(directory.path).deleteSync());
+
+      expect(await load(cacheWith(found), 80), 'size 80');
+    });
+
     group('when the download fails', () {
       test('throws and stores nothing when offline', () async {
         final cache = cacheWith(offline);
