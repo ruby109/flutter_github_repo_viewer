@@ -60,6 +60,20 @@ void main() {
       expect(placeholder, findsOneWidget);
     });
 
+    testWidgets('tries a failed avatar again when shown again', (tester) async {
+      avatars.offline = true;
+      await pumpAvatar(tester, flutterAvatar);
+      await loadImages(tester);
+      expect(placeholder, findsOneWidget);
+
+      avatars.offline = false;
+      await tester.pumpWidget(const SizedBox());
+      await pumpAvatar(tester, flutterAvatar);
+      await loadImages(tester);
+
+      expect(placeholder, findsNothing);
+    });
+
     group('cached on disk', () {
       /// Loads [flutterAvatar] once, then forgets the decoded image, as
       /// after an app restart.

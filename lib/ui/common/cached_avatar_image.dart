@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -37,14 +36,9 @@ class CachedAvatarImage extends ImageProvider<CachedAvatarImage> {
     CachedAvatarImage key,
     ImageDecoderCallback decode,
   ) async {
-    try {
-      final bytes = await cache.load(url);
-      return await decode(await ui.ImmutableBuffer.fromUint8List(bytes));
-    } on Object {
-      // Not cached as failed in memory, so it is tried again next time.
-      scheduleMicrotask(() => PaintingBinding.instance.imageCache.evict(key));
-      rethrow;
-    }
+    // A failure isn't kept in the ImageCache, so showing it again retries.
+    final bytes = await cache.load(url);
+    return decode(await ui.ImmutableBuffer.fromUint8List(bytes));
   }
 
   @override
