@@ -7,6 +7,18 @@ A Flutter app for iOS and Android that searches GitHub repositories and keeps a 
 - **Search**: find public repositories through the GitHub REST API.
 - **Stars**: save repositories locally and browse them later, offline.
 
+## Screenshots
+
+Rendered by the golden tests from real GitHub data, at iPhone 17 size.
+
+| Search | Results | Detail | Stars |
+|---|---|---|---|
+| <img src="test/ui/shell/goldens/home_shell_search_iphone_17.png" width="200" alt="Search tab, home state"> | <img src="test/ui/search/goldens/search_screen_results_iphone_17.png" width="200" alt="Search results with a starred row"> | <img src="test/ui/detail/goldens/repo_detail_screen_loaded_iphone_17.png" width="200" alt="Repository detail"> | <img src="test/ui/stars/goldens/stars_screen_starred_iphone_17.png" width="200" alt="Stars tab"> |
+
+| Rate limited | Results, dark | Detail, dark | Stars, dark |
+|---|---|---|---|
+| <img src="test/ui/search/goldens/search_screen_rate_limited_iphone_17.png" width="200" alt="Search rate limited"> | <img src="test/ui/search/goldens/search_screen_results_dark_iphone_17.png" width="200" alt="Search results in dark mode"> | <img src="test/ui/detail/goldens/repo_detail_screen_loaded_dark_iphone_17.png" width="200" alt="Repository detail in dark mode"> | <img src="test/ui/stars/goldens/stars_screen_starred_dark_iphone_17.png" width="200" alt="Stars tab in dark mode"> |
+
 ## Requirements
 
 - Flutter 3.47 (stable channel) with Dart 3.13
