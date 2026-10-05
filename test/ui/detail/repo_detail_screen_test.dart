@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -147,6 +148,20 @@ void main() {
       expect(find.text('3,546'), findsOneWidget);
       expect(find.text('Subscribers'), findsOneWidget);
     });
+
+    testWidgets(
+      "uses the platform's loading indicator",
+      variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+      (tester) async {
+        final response = Completer<http.Response>();
+        await pumpScreen(tester, () => response.future);
+
+        expect(find.byType(CupertinoActivityIndicator), findsOneWidget);
+
+        response.complete(found());
+        await tester.pump();
+      },
+    );
 
     testWidgets('keeps the card the same width once loaded', (tester) async {
       final response = Completer<http.Response>();

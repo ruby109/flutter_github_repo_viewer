@@ -24,7 +24,7 @@ class SearchResultsView extends ConsumerWidget {
     return switch (ref.watch(provider)) {
       // Checked first: retrying keeps the previous error until it loads.
       AsyncValue(isLoading: true) => const Center(
-        child: CircularProgressIndicator(),
+        child: CircularProgressIndicator.adaptive(),
       ),
       AsyncValue(:final error?) => _ErrorMessage(
         error: error,

@@ -1,4 +1,4 @@
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:github_repo_viewer/ui/app_theme.dart';
@@ -91,8 +91,8 @@ String goldenModeSuffix(Brightness brightness) =>
     brightness == Brightness.dark ? '_dark' : '';
 
 /// The app's themes, for `MaterialApp.theme` and `darkTheme` in golden tests.
-final goldenTheme = AppTheme.light;
-final goldenDarkTheme = AppTheme.dark;
+ThemeData get goldenTheme => AppTheme.light;
+ThemeData get goldenDarkTheme => AppTheme.dark;
 
 void _useDevice(WidgetTester tester, GoldenDevice device) {
   final insets = device.safeArea * device.pixelRatio;

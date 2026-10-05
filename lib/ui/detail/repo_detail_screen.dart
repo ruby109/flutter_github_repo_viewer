@@ -103,7 +103,7 @@ class _Subscribers extends ConsumerWidget {
         child: switch (ref.watch(provider)) {
           // Checked first: retrying keeps the previous error until it loads.
           AsyncValue(isLoading: true) => const Center(
-            child: CircularProgressIndicator(),
+            child: CircularProgressIndicator.adaptive(),
           ),
           AsyncValue(:final error?) => Column(
             children: [

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -80,6 +81,20 @@ void main() {
 
       expect(spinner, findsNothing);
     });
+
+    testWidgets(
+      "uses the platform's loading indicator",
+      variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+      (tester) async {
+        final response = Completer<http.Response>();
+        await pumpView(tester, (_) => response.future);
+
+        expect(find.byType(CupertinoActivityIndicator), findsOneWidget);
+
+        response.complete(found(1));
+        await tester.pump();
+      },
+    );
 
     testWidgets('lists the results', (tester) async {
       await pumpView(tester, (_) async => found(2));
