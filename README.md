@@ -268,10 +268,19 @@ Avatars are cached in two layers, like SDWebImage:
 
 | Layer | What | Details |
 |---|---|---|
-| Memory | Flutter's `ImageCache` | Decoded images, keyed by URL and size; up to 1,000 images or 100 MB, least recently used first out. Concurrent loads of one URL share one request. |
-| Disk | `AvatarCache` (`lib/data/avatars/`) | The downloaded bytes, one file per URL, in the system's temporary directory (which the OS may clear when storage runs low, as caches allow). Written to a temporary file and renamed, so a half-written file is never read. Used directly for 7 days, then downloaded again; if that fails, as when offline, the old copy is still shown. The oldest files are removed once the cache passes 20 MB. |
+| Memory | Flutter's `ImageCache` | Decoded images, keyed by URL and size; up to 1,000 images or 100 MB, least recently used first out. Concurrent loads of one image share one request. |
+| Disk | `AvatarCache` (`lib/data/avatars/`) | The downloaded bytes, one file per avatar and size, in the system's temporary directory (which the OS may clear when storage runs low, as caches allow). |
 
-`CachedAvatarImage` connects the two: an `ImageProvider` that loads through `AvatarCache`, so avatars seen before show after a restart and offline without the network. Decoding runs in the engine, off the UI isolate, and the `Image` widget defers loading while the list scrolls fast. Requests for rows scrolled away aren't cancelled, but their results land in the caches for when the rows come back.
+How the disk cache behaves:
+
+- **One avatar, several sizes.** GitHub resizes avatars on request, so the list (40 points) and the detail screen (96 points) ask for different sizes. Like SDWebImage, which keeps one original and decodes each size from it, the cache looks at every size it has before downloading: a fresh larger one is scaled down instead of downloading a smaller one, and offline any cached size is shown, a smaller one scaled up rather than a placeholder.
+- **Freshness.** A file is used as is for 7 days, as GitHub can change an avatar without changing its URL, then downloaded again; if that fails, as when offline, the old file is still shown.
+- **Size limit.** When the app goes to the background, files past 20 MB are removed, least recently used first, along with temporary files left by an interrupted write. Old files otherwise stay: offline, they are all there is.
+- **Safety.** Each download is written to its own temporary file and renamed, so a half-written file is never read. A download that isn't a valid image is removed when it fails to decode, so the next attempt downloads it again.
+
+`CachedAvatarImage` connects the two layers: an `ImageProvider` that loads through `AvatarCache`. Decoding runs in the engine, off the UI isolate, and the `Image` widget defers loading while the list scrolls fast.
+
+Requests for rows that scroll away before their avatar arrives aren't cancelled; their results land in the caches for when the rows come back. Cancelling them, as `flutter_map` does with `package:http`'s `AbortableRequest`, would also need counting the rows that share an avatar, since one in-flight request serves them all. Avatars are a few KB each, so the saving is small.
 
 ### Testing the screen
 
