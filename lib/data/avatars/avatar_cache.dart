@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -24,12 +25,14 @@ class AvatarCache {
     this._http, {
     required this.directory,
     this.maxBytes = defaultMaxBytes,
+    this._timeout = defaultTimeout,
     this._now = DateTime.now,
   });
 
   final http.Client _http;
   final Directory directory;
   final int maxBytes;
+  final Duration _timeout;
   final DateTime Function() _now;
 
   /// GitHub can change an avatar without changing its URL.
@@ -37,6 +40,10 @@ class AvatarCache {
 
   /// Thousands of list-sized avatars, at a few KB each.
   static const defaultMaxBytes = 20 * 1024 * 1024;
+
+  /// As for the GitHub API: a stalled download fails, so a cached size can
+  /// stand in.
+  static const defaultTimeout = Duration(seconds: 15);
 
   static const _gitHubAvatarHost = 'avatars.githubusercontent.com';
 
@@ -197,7 +204,7 @@ class AvatarCache {
   }
 
   Future<Uint8List> _download(Uri url) async {
-    final response = await _http.get(url);
+    final response = await _http.get(url).timeout(_timeout);
     if (response.statusCode != HttpStatus.ok) {
       throw HttpException('${response.statusCode} for $url', uri: url);
     }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -34,6 +35,7 @@ void main() {
     AvatarCache cacheWith(
       Future<http.Response> Function(http.Request request) respond, {
       int maxBytes = 1024 * 1024,
+      Duration timeout = AvatarCache.defaultTimeout,
     }) {
       return AvatarCache(
         MockClient((request) {
@@ -42,6 +44,7 @@ void main() {
         }),
         directory: directory,
         maxBytes: maxBytes,
+        timeout: timeout,
         now: () => now,
       );
     }
@@ -167,6 +170,34 @@ void main() {
         final cache = await cachedWeekAgo(offline);
 
         expect(await load(cache, 80), 'size 80');
+      });
+    });
+
+    // A stalled connection mustn't hide the avatar forever.
+    group('when the download stalls', () {
+      Future<http.Response> stalled(http.Request _) =>
+          Completer<http.Response>().future;
+
+      test('throws after the timeout', () async {
+        final cache = cacheWith(
+          stalled,
+          timeout: const Duration(milliseconds: 10),
+        );
+
+        await expectLater(
+          cache.load(url, pixels: 80),
+          throwsA(isA<TimeoutException>()),
+        );
+      });
+
+      test('falls back to a cached size after the timeout', () async {
+        await load(cacheWith(found), 120);
+        final cache = cacheWith(
+          stalled,
+          timeout: const Duration(milliseconds: 10),
+        );
+
+        expect(await load(cache, 288), 'size 120');
       });
     });
 
