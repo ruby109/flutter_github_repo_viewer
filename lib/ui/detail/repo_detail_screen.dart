@@ -58,8 +58,9 @@ class RepoDetailScreen extends StatelessWidget {
 /// menu (the edit menu on iOS, the text toolbar on Android), whose Copy
 /// copies the whole name.
 ///
-/// A menu rather than selectable text, which would select only the word
-/// under the finger (e.g. one half of `flutter/flutter`).
+/// It uses a menu rather than selectable text, because selecting text would
+/// select only the word under the finger (e.g. one half of
+/// `flutter/flutter`).
 class _CopyableName extends StatefulWidget {
   const _CopyableName({required this.fullName, required this.style});
 

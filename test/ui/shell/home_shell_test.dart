@@ -341,8 +341,13 @@ void main() {
 
     group('golden', () {
       for (final device in goldenDevices) {
-        for (final tab in AppTab.values) {
-          testGoldens('${tab.name} tab', device, (tester) async {
+        for (final (tab, brightness) in [
+          for (final tab in AppTab.values)
+            for (final brightness in Brightness.values) (tab, brightness),
+        ]) {
+          testGoldens('${tab.name} tab', device, brightness: brightness, (
+            tester,
+          ) async {
             await tester.pumpWidget(
               ProviderScope(
                 overrides: [
@@ -364,7 +369,8 @@ void main() {
             await expectLater(
               find.byType(HomeShell),
               matchesGoldenFile(
-                'goldens/home_shell_${tab.name}_${device.name}.png',
+                'goldens/home_shell_${tab.name}'
+                '${goldenModeSuffix(brightness)}_${device.name}.png',
               ),
             );
           });

@@ -277,7 +277,7 @@ Tapping a search result opens `RepoDetailScreen` (`lib/ui/detail/`) within the t
 On the screen:
 
 - **Shown at once:** the owner avatar (96 pixels), `full_name` and the star button come from the search result, so they don't wait for the network.
-- **Copying the name:** long-pressing `full_name` shows the platform's copy menu (the edit menu on iOS, the text toolbar on Android); Copy copies the whole name. A menu rather than selectable text, which would select only the word under the finger.
+- **Copying the name:** long-pressing `full_name` shows the platform's copy menu (the edit menu on iOS, the text toolbar on Android); Copy copies the whole name. The app uses a menu rather than selectable text, because selecting text would select only the word under the finger.
 - **Loaded:** `subscribers_count` comes from the Repository API through `repoDetailProvider` (`lib/state/repo_detail_provider.dart`), an `autoDispose` family keyed by full name, so reopening a repository loads its latest count. Like search, it never retries on its own: unauthenticated clients get 60 of these requests an hour.
 - **States of the subscriber count:** a loading indicator; the count with thousands separators; or the error with a Retry button. A deleted repository (404) says it no longer exists and offers no retry, since retrying can't bring it back. The rest of the screen, including the star, stays usable.
 - **Stars stay in sync:** the star button watches the same `isStarredProvider(id)` as the list rows, so starring here shows in the list on returning, without reloading anything.
