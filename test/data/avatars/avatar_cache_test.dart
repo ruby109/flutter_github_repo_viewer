@@ -173,6 +173,17 @@ void main() {
       });
     });
 
+    // Falling back is for failed downloads, not bugs.
+    test('lets errors through even with a size cached', () async {
+      await load(cacheWith(found), 120);
+      final cache = cacheWith((_) async => throw StateError('bug'));
+
+      await expectLater(
+        cache.load(url, pixels: 288),
+        throwsA(isA<StateError>()),
+      );
+    });
+
     // A stalled connection mustn't hide the avatar forever.
     group('when the download stalls', () {
       Future<http.Response> stalled(http.Request _) =>

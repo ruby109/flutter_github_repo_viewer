@@ -74,8 +74,9 @@ class AvatarCache {
     final Uint8List bytes;
     try {
       bytes = await _download(_requestUrl(url, size));
-    } on Object {
-      // Any size, however old, beats a placeholder.
+    } on Exception {
+      // Offline, an error status or a timeout: any size, however old, beats
+      // a placeholder. Errors (bugs) still propagate.
       for (final file in [
         ..._largerFirst(cached, size),
         ..._smallerFirst(cached, size),
