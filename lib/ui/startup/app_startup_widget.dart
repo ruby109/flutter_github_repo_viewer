@@ -16,10 +16,12 @@ class AppStartupWidget extends ConsumerWidget {
   /// The app, shown once startup has finished.
   final Widget child;
 
-  /// The native launch screen's background (`launch_background.xml` on
-  /// Android, `LaunchScreen.storyboard` on iOS), so loading looks like the
-  /// launch screen staying a moment longer.
-  static const launchBackground = Color(0xFFFFFFFF);
+  /// The native launch screen's background in light and dark mode (the
+  /// launch theme's background on Android, `systemBackground` in
+  /// `LaunchScreen.storyboard` on iOS), so loading looks like the launch
+  /// screen staying a moment longer.
+  static const lightBackground = Color(0xFFFFFFFF);
+  static const darkBackground = Color(0xFF000000);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -42,9 +44,12 @@ class _Loading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const ColoredBox(
-      color: AppStartupWidget.launchBackground,
-      child: SizedBox.expand(),
+    return ColoredBox(
+      color: switch (MediaQuery.platformBrightnessOf(context)) {
+        Brightness.light => AppStartupWidget.lightBackground,
+        Brightness.dark => AppStartupWidget.darkBackground,
+      },
+      child: const SizedBox.expand(),
     );
   }
 }
