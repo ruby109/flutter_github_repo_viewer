@@ -283,6 +283,27 @@ void main() {
         expect(find.text('flutter/flutter'), findsOneWidget);
       });
 
+      // e.g. a loading indicator on a hidden detail screen would keep
+      // scheduling frames.
+      testWidgets('stops animations on hidden tabs', (tester) async {
+        await openResult(tester);
+        bool animates() => TickerMode.valuesOf(
+          tester.element(find.byType(RepoDetailScreen, skipOffstage: false)),
+        ).enabled;
+
+        expect(animates(), isTrue);
+
+        await tester.tap(tabItem(AppTab.favorites));
+        await tester.pumpAndSettle();
+
+        expect(animates(), isFalse);
+
+        await tester.tap(tabItem(AppTab.search));
+        await tester.pumpAndSettle();
+
+        expect(animates(), isTrue);
+      });
+
       testWidgets('keeps the detail screen open while on another tab', (
         tester,
       ) async {
