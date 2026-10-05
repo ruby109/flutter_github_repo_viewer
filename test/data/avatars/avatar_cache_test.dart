@@ -137,29 +137,101 @@ void main() {
       });
     });
 
-    test('removes the oldest avatars once over its size limit', () async {
-      final cache = cacheWith(
-        (_) async => http.Response.bytes(List.filled(400, 0), 200),
-        maxBytes: 1000,
-      );
+    group('trim', () {
       Uri avatarOf(int user) =>
           Uri.parse('https://avatars.githubusercontent.com/u/$user?v=4');
 
-      for (var user = 1; user <= 3; user++) {
-        await cache.load(avatarOf(user));
-        // Each avatar is written a minute after the previous one.
-        now = now.add(const Duration(minutes: 1));
+      /// A cache holding avatars 1 to [count], 400 bytes each, loaded a
+      /// minute apart, with room for [maxBytes].
+      Future<AvatarCache> filled(int count, {required int maxBytes}) async {
+        final cache = cacheWith(
+          (_) async => http.Response.bytes(List.filled(400, 0), 200),
+          maxBytes: maxBytes,
+        );
+        for (var user = 1; user <= count; user++) {
+          await cache.load(avatarOf(user));
+          now = now.add(const Duration(minutes: 1));
+        }
+        return cache;
       }
 
-      final remaining = cachedFiles();
-      expect(
-        remaining.fold<int>(0, (sum, file) => sum + file.lengthSync()),
-        lessThanOrEqualTo(1000),
-      );
-      // The first avatar was evicted, so it is downloaded again.
-      requests.clear();
-      await cache.load(avatarOf(1));
-      expect(requests, [avatarOf(1)]);
+      Future<bool> isCached(AvatarCache cache, int user) async {
+        requests.clear();
+        await cache.load(avatarOf(user));
+        return requests.isEmpty;
+      }
+
+      // Scanning the directory on every write would slow loading a list.
+      test('only removes files when asked', () async {
+        await filled(3, maxBytes: 1000);
+
+        expect(cachedFiles(), hasLength(3));
+      });
+
+      test('removes the least recently used avatars over the limit', () async {
+        final cache = await filled(3, maxBytes: 1000);
+        // Avatar 1 was seen again most recently, so avatar 2 is the least
+        // recently used.
+        await cache.load(avatarOf(1));
+        now = now.add(const Duration(minutes: 1));
+
+        await cache.trim();
+
+        expect(
+          cachedFiles().fold<int>(0, (sum, file) => sum + file.lengthSync()),
+          lessThanOrEqualTo(1000),
+        );
+        expect(await isCached(cache, 1), isTrue);
+        expect(await isCached(cache, 3), isTrue);
+        expect(await isCached(cache, 2), isFalse);
+      });
+
+      // Old files are the offline fallback, so age alone doesn't remove them.
+      test('keeps old avatars while under the limit', () async {
+        final cache = await filled(2, maxBytes: 1000);
+        now = now.add(AvatarCache.maxAge * 2);
+
+        await cache.trim();
+
+        expect(cachedFiles(), hasLength(2));
+      });
+
+      // Left behind if the app is killed while writing.
+      test('removes leftover temporary files', () async {
+        final cache = await filled(1, maxBytes: 1000);
+        File('${directory.path}/leftover.tmp').writeAsBytesSync([1]);
+
+        await cache.trim();
+
+        expect(
+          cachedFiles().map((file) => file.path),
+          everyElement(isNot(endsWith('.tmp'))),
+        );
+      });
+
+      test('does nothing before anything is cached', () async {
+        directory.deleteSync(recursive: true);
+
+        await cacheWith(found).trim();
+
+        directory.createSync();
+      });
     });
+
+    // Reading an avatar marks it as used, but doesn't make it fresh.
+    test(
+      'still refreshes an avatar seen often after the maximum age',
+      () async {
+        final cache = cacheWith(found);
+        await cache.load(url);
+        now = now.add(AvatarCache.maxAge - const Duration(minutes: 1));
+        await cache.load(url);
+        now = now.add(const Duration(minutes: 2));
+
+        await cache.load(url);
+
+        expect(requests, hasLength(2));
+      },
+    );
   });
 }
