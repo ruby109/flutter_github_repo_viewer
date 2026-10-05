@@ -62,6 +62,7 @@ lib/
 ├── main.dart                     runApp, MyApp (themes, AppStartupWidget → HomeShell)
 ├── data/
 │   ├── github/                   API client, models, exceptions, client providers
+│   ├── avatars/                  disk cache for avatar images
 │   └── preferences/              loading SharedPreferencesWithCache
 ├── state/                        search query/results, repo detail, favorites
 └── ui/
@@ -136,6 +137,7 @@ Riverpod retries failed providers by default. That is turned off for everything 
 | Loading the next page fails | The loaded results stay; the end of the list shows the error with Retry. |
 | Repository deleted after it was listed (404) | The detail screen says it no longer exists, without a pointless Retry. |
 | Repository without an owner (`owner: null`) | A placeholder avatar. |
+| Offline, or after a restart | Avatars seen before come from the disk cache; others show a placeholder until they load. |
 | Stored favorites corrupt or from another version | Unreadable data loads as no favorites instead of crashing; valid entries are kept. |
 | A favorite fails to save | A SnackBar says so; the notifier reloads storage when possible (see [Failed saves](#corrupt-data-and-failed-saves)). |
 | Preferences fail to load at startup | An error screen with Retry instead of a launch screen that never goes away. |
@@ -161,7 +163,7 @@ Packages not used, and what the app does instead:
 | Common choice | Instead |
 |---|---|
 | go_router (`StatefulShellRoute`) | A `Navigator` per tab in `HomeShell`, with `NavigatorPopHandler` for system back |
-| cached_network_image | `Image.network` with avatars requested and decoded at the size shown (see [Avatars](#avatars)) |
+| cached_network_image | A small disk cache, `AvatarCache`, behind an `ImageProvider`, with avatars requested and decoded at the size shown (see [Avatars](#avatars)) |
 | intl | A small thousands-separator formatter for the subscriber count |
 | freezed, json_serializable | Hand-written `fromJson` with Dart 3 patterns, which validates the few fields the app uses |
 | mocktail, fake_async | `MockClient` from `http`, small hand-written fakes, and test-controlled `Completer`s |
@@ -262,10 +264,19 @@ The Search tab (`lib/ui/search/`) searches repositories by keyword. Its state is
 
 `RepoAvatar` asks GitHub's avatar host for an image the size it is shown (the `s` parameter) and decodes it at that size, instead of the default 460 pixels. A placeholder shows while it loads, if it fails, or when a repository has no owner.
 
+Avatars are cached in two layers, like SDWebImage:
+
+| Layer | What | Details |
+|---|---|---|
+| Memory | Flutter's `ImageCache` | Decoded images, keyed by URL and size; up to 1,000 images or 100 MB, least recently used first out. Concurrent loads of one URL share one request. |
+| Disk | `AvatarCache` (`lib/data/avatars/`) | The downloaded bytes, one file per URL, in the system's temporary directory (which the OS may clear when storage runs low, as caches allow). Written to a temporary file and renamed, so a half-written file is never read. Used directly for 7 days, then downloaded again; if that fails, as when offline, the old copy is still shown. The oldest files are removed once the cache passes 20 MB. |
+
+`CachedAvatarImage` connects the two: an `ImageProvider` that loads through `AvatarCache`, so avatars seen before show after a restart and offline without the network. Decoding runs in the engine, off the UI isolate, and the `Image` widget defers loading while the list scrolls fast. Requests for rows scrolled away aren't cancelled, but their results land in the caches for when the rows come back.
+
 ### Testing the screen
 
 - `test/fixtures/` holds a real Search API response for `flutter`, the Repository API response for its first result, and their owners' avatars, saved by `dart run tool/fetch_fixtures.dart`. The parsers and the golden tests use them.
-- `withAvatarFixtures` (`test/helpers/avatars.dart`) makes `Image.network` load those avatars instead of the network, through Flutter's `debugNetworkImageHttpClientProvider`, so goldens show real images.
+- `AvatarFixtures` (`test/helpers/avatars.dart`) serves those avatars through a real `AvatarCache` over a temporary directory, so goldens show real images and tests can go offline.
 - Golden tests cover the results, no results and rate limited states, and both ends of the list (every result shown, and the 1,000-result limit), at every device size. The detail screen has goldens for loaded, loading, rate limited and not found.
 
 ## Detail Screen
@@ -293,7 +304,7 @@ The Stars tab (`lib/ui/stars/`) lists the starred repositories, most recently st
 - **Empty state** when nothing is starred, pointing to Search.
 - **In sync with the other screens:** it watches `favoritesProvider`, so stars added or removed in Search or on the detail screen show immediately, and unstarring here updates their star buttons. Widget tests drive the whole shell to check this end to end.
 - **Tapping a row** opens the [detail screen](#detail-screen), as in Search.
-- Stars are stored on the device, so the tab works offline; only the avatars need the network.
+- Stars are stored on the device, so the tab works offline, and avatars seen before come from the [disk cache](#avatars).
 
 ## Favorites
 
