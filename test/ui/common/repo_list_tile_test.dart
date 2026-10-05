@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import 'package:github_repo_viewer/data/github/github_repo.dart';
 import 'package:github_repo_viewer/ui/common/repo_avatar.dart';
 import 'package:github_repo_viewer/ui/common/repo_list_tile.dart';
+
+import '../../helpers/avatars.dart';
 
 void main() {
   group('RepoListTile', () {
@@ -20,9 +23,12 @@ void main() {
       VoidCallback? onTap,
     }) {
       return tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: RepoListTile(repo: repo, trailing: trailing, onTap: onTap),
+        ProviderScope(
+          overrides: [AvatarFixtures().override],
+          child: MaterialApp(
+            home: Scaffold(
+              body: RepoListTile(repo: repo, trailing: trailing, onTap: onTap),
+            ),
           ),
         ),
       );

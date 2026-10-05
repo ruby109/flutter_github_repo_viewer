@@ -44,6 +44,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            AvatarFixtures().override,
             sharedPreferencesProvider.overrideWithValue(preferences),
             httpClientProvider.overrideWithValue(
               MockClient((_) {
@@ -353,6 +354,7 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
+              AvatarFixtures().override,
               sharedPreferencesProvider.overrideWithValue(preferences),
               httpClientProvider.overrideWithValue(
                 MockClient((_) => respond()),
@@ -387,59 +389,48 @@ void main() {
       for (final device in goldenDevices) {
         for (final brightness in Brightness.values) {
           testGoldens('loaded', device, brightness: brightness, (tester) async {
-            await withAvatarFixtures((_) async {
-              await pumpFixture(
-                tester,
-                () async => http.Response.bytes(
-                  utf8.encode(jsonEncode(repoDetailFixture())),
-                  200,
-                  headers: {'content-type': 'application/json; charset=utf-8'},
-                ),
-              );
-              await tester.pump();
-              await loadImages(tester);
+            await pumpFixture(
+              tester,
+              () async => http.Response.bytes(
+                utf8.encode(jsonEncode(repoDetailFixture())),
+                200,
+                headers: {'content-type': 'application/json; charset=utf-8'},
+              ),
+            );
+            await tester.pump();
+            await loadImages(tester);
 
-              await expectGolden(
-                'loaded${goldenModeSuffix(brightness)}',
-                device,
-              );
-            });
+            await expectGolden('loaded${goldenModeSuffix(brightness)}', device);
           });
         }
 
         testGoldens('loading', device, (tester) async {
           final response = Completer<http.Response>();
-          await withAvatarFixtures((_) async {
-            await pumpFixture(tester, () => response.future);
-            await loadImages(tester);
-            // Past the progress indicator's first frame, which is a dot.
-            await tester.pump(const Duration(milliseconds: 400));
+          await pumpFixture(tester, () => response.future);
+          await loadImages(tester);
+          // Past the progress indicator's first frame, which is a dot.
+          await tester.pump(const Duration(milliseconds: 400));
 
-            await expectGolden('loading', device);
-          });
+          await expectGolden('loading', device);
           // Finish the request so no timer is left pending.
           response.complete(http.Response('{}', 404));
           await tester.pump();
         });
 
         testGoldens('rate limited', device, (tester) async {
-          await withAvatarFixtures((_) async {
-            await pumpFixture(tester, () async => rateLimited());
-            await tester.pump();
-            await loadImages(tester);
+          await pumpFixture(tester, () async => rateLimited());
+          await tester.pump();
+          await loadImages(tester);
 
-            await expectGolden('rate_limited', device);
-          });
+          await expectGolden('rate_limited', device);
         });
 
         testGoldens('not found', device, (tester) async {
-          await withAvatarFixtures((_) async {
-            await pumpFixture(tester, () async => http.Response('{}', 404));
-            await tester.pump();
-            await loadImages(tester);
+          await pumpFixture(tester, () async => http.Response('{}', 404));
+          await tester.pump();
+          await loadImages(tester);
 
-            await expectGolden('not_found', device);
-          });
+          await expectGolden('not_found', device);
         });
       }
     });

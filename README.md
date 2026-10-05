@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/ruby109/flutter_github_repo_viewer/actions/workflows/ci.yml/badge.svg)](https://github.com/ruby109/flutter_github_repo_viewer/actions/workflows/ci.yml)
 
-A Flutter app for iOS and Android that searches GitHub repositories and keeps a list of the ones you star.
+A Flutter app for iOS and Android that searches GitHub repositories and keeps a list of local favorites. Stars are saved on the device and do not change your GitHub account's stars.
 
 - **Search**: find public repositories through the GitHub REST API.
 - **Stars**: save repositories locally and browse them later, offline.
@@ -23,7 +23,7 @@ Rendered by the golden tests from real GitHub data, at iPhone 17 size.
 
 ## Requirements
 
-- Flutter 3.47 (stable channel) with Dart 3.13
+- Flutter 3.47.6 (stable channel), the version used by CI, with Dart 3.13.5. `pubspec.yaml` requires Dart `>=3.13.5 <4.0.0`.
 - Xcode for the iOS simulator, Android Studio (or the Android SDK) for the Android emulator
 
 ## Getting Started
@@ -36,12 +36,14 @@ flutter pub get && flutter run    # pick a simulator/emulator, or pass -d <devic
 
 No API key or configuration is needed: the app calls GitHub's public API without authentication.
 
-Release builds:
+Release-mode builds for local testing:
 
 ```sh
 flutter build apk --release              # Android, build/app/outputs/flutter-apk/app-release.apk
 flutter build ios --release --no-codesign  # iOS; sign and archive in Xcode to install on a device
 ```
+
+The Android release configuration currently uses the debug signing key. Store distribution requires your own application ID and release signing configuration; iOS distribution also requires signing and provisioning in Xcode.
 
 ## Key Implementation Points
 
@@ -60,6 +62,7 @@ lib/
 ├── main.dart                     runApp, MyApp (themes, AppStartupWidget → HomeShell)
 ├── data/
 │   ├── github/                   API client, models, exceptions, client providers
+│   ├── avatars/                  disk cache for avatar images
 │   └── preferences/              loading SharedPreferencesWithCache
 ├── state/                        search query/results, repo detail, favorites
 └── ui/
@@ -109,7 +112,7 @@ flowchart LR
 | `sharedPreferencesProvider` | `Provider` | The loaded preferences, read synchronously everywhere after startup. |
 | `searchQueryProvider` | `NotifierProvider<String>` | The submitted search text; empty means the home state. |
 | `searchResultsProvider(query)` | `AsyncNotifierProvider`, `autoDispose` family, no automatic retry | One result set per keyword, so a new search never shows the previous one's results; also loads the next pages. |
-| `repoDetailProvider(fullName)` | `FutureProvider`, `autoDispose` family, no automatic retry | Fetched when a detail screen opens, dropped when it closes. |
+| `repoDetailProvider(fullName)` | `FutureProvider`, `autoDispose` family, no automatic retry | Shared by screens showing the same repository; disposed when no screen listens to it. |
 | `favoritesProvider` | `NotifierProvider<List<GitHubRepo>>` | The single owner of the starred list, and `toggle`. |
 | `starredIdsProvider`, `isStarredProvider(id)` | `Provider`, then an `autoDispose` family | One repository's star, so a star button rebuilds only when its own star changes. |
 
@@ -117,7 +120,7 @@ Riverpod retries failed providers by default. That is turned off for everything 
 
 ### How favorites stay in sync
 
-`favoritesProvider` is the only place stars live. The search list, the detail screen and the Stars tab all read it, and every star button changes it through `toggle(repo)`. The change shows on every screen at once, before it is saved; a failed save is reported in a SnackBar and the screens show what is actually stored. Details are in [Favorites](#favorites).
+`favoritesProvider` is the only place stars live. The search list, the detail screen and the Stars tab all read it, and every star button changes it through `toggle(repo)`. The change shows on every screen at once, before it is saved; a failed save is reported in a SnackBar, and the notifier attempts to restore the stored list. Details are in [Favorites](#favorites).
 
 ### Navigation
 
@@ -134,8 +137,9 @@ Riverpod retries failed providers by default. That is turned off for everything 
 | Loading the next page fails | The loaded results stay; the end of the list shows the error with Retry. |
 | Repository deleted after it was listed (404) | The detail screen says it no longer exists, without a pointless Retry. |
 | Repository without an owner (`owner: null`) | A placeholder avatar. |
+| Offline, or after a restart | Avatars seen before come from the disk cache; others show a placeholder until they load. |
 | Stored favorites corrupt or from another version | Unreadable data loads as no favorites instead of crashing; valid entries are kept. |
-| A favorite fails to save | A SnackBar says so, and the screens show what is actually stored. |
+| A favorite fails to save | A SnackBar says so; the notifier reloads storage when possible (see [Failed saves](#corrupt-data-and-failed-saves)). |
 | Preferences fail to load at startup | An error screen with Retry instead of a launch screen that never goes away. |
 | Large accessibility text, long names, tablets | Text wraps instead of overflowing; content is width-limited on wide screens. |
 | Blank or whitespace-only search | The home state; no request is sent. |
@@ -159,7 +163,7 @@ Packages not used, and what the app does instead:
 | Common choice | Instead |
 |---|---|
 | go_router (`StatefulShellRoute`) | A `Navigator` per tab in `HomeShell`, with `NavigatorPopHandler` for system back |
-| cached_network_image | `Image.network` with avatars requested and decoded at the size shown (see [Avatars](#avatars)) |
+| cached_network_image | A small disk cache, `AvatarCache`, behind an `ImageProvider`, with avatars requested and decoded at the size shown (see [Avatars](#avatars)) |
 | intl | A small thousands-separator formatter for the subscriber count |
 | freezed, json_serializable | Hand-written `fromJson` with Dart 3 patterns, which validates the few fields the app uses |
 | mocktail, fake_async | `MockClient` from `http`, small hand-written fakes, and test-controlled `Completer`s |
@@ -260,10 +264,28 @@ The Search tab (`lib/ui/search/`) searches repositories by keyword. Its state is
 
 `RepoAvatar` asks GitHub's avatar host for an image the size it is shown (the `s` parameter) and decodes it at that size, instead of the default 460 pixels. A placeholder shows while it loads, if it fails, or when a repository has no owner.
 
+Avatars are cached in two layers, like SDWebImage:
+
+| Layer | What | Details |
+|---|---|---|
+| Memory | Flutter's `ImageCache` | Decoded images, keyed by URL and size; up to 1,000 images or 100 MB, least recently used first out. Concurrent loads of one image share one request. |
+| Disk | `AvatarCache` (`lib/data/avatars/`) | The downloaded bytes, one file per avatar and size, in the system's temporary directory (which the OS may clear when storage runs low, as caches allow). |
+
+How the disk cache behaves:
+
+- **One avatar, several sizes.** GitHub resizes avatars on request, so the list (40 points) and the detail screen (96 points) ask for different sizes. Like SDWebImage, which keeps one original and decodes each size from it, the cache looks at every size it has before downloading: a fresh larger one is scaled down instead of downloading a smaller one, and offline any cached size is shown, a smaller one scaled up rather than a placeholder.
+- **Freshness.** A file is used as is for 7 days, as GitHub can change an avatar without changing its URL, then downloaded again; if that fails, as when offline, the old file is still shown.
+- **Size limit.** When the app goes to the background, files past 20 MB are removed, least recently used first, along with temporary files over a minute old, left by an interrupted write (newer ones may still be being written). Trimming is upkeep: a file system error just ends it. Old files otherwise stay: offline, they are all there is.
+- **Safety.** Each download is written to its own temporary file and renamed, so a half-written file is never read. A cached file that can't be read (e.g. trimmed a moment earlier) counts as not cached. A download that takes over 15 seconds fails, like an API request, so a cached size can stand in. A download that isn't a valid image is removed when it fails to decode, so the next attempt downloads it again.
+
+`CachedAvatarImage` connects the two layers: an `ImageProvider` that loads through `AvatarCache`. Decoding runs in the engine, off the UI isolate, and the `Image` widget defers loading while the list scrolls fast.
+
+Requests for rows that scroll away before their avatar arrives aren't cancelled; their results land in the caches for when the rows come back. Cancelling them, as `flutter_map` does with `package:http`'s `AbortableRequest`, would also need counting the rows that share an avatar, since one in-flight request serves them all. Avatars are a few KB each, so the saving is small.
+
 ### Testing the screen
 
 - `test/fixtures/` holds a real Search API response for `flutter`, the Repository API response for its first result, and their owners' avatars, saved by `dart run tool/fetch_fixtures.dart`. The parsers and the golden tests use them.
-- `withAvatarFixtures` (`test/helpers/avatars.dart`) makes `Image.network` load those avatars instead of the network, through Flutter's `debugNetworkImageHttpClientProvider`, so goldens show real images.
+- `AvatarFixtures` (`test/helpers/avatars.dart`) serves those avatars through a real `AvatarCache` over a temporary directory, so goldens show real images and tests can go offline.
 - Golden tests cover the results, no results and rate limited states, and both ends of the list (every result shown, and the 1,000-result limit), at every device size. The detail screen has goldens for loaded, loading, rate limited and not found.
 
 ## Detail Screen
@@ -278,7 +300,7 @@ On the screen:
 
 - **Shown at once:** the owner avatar (96 pixels), `full_name` and the star button come from the search result, so they don't wait for the network.
 - **Copying the name:** long-pressing `full_name` shows the platform's copy menu (the edit menu on iOS, the text toolbar on Android); Copy copies the whole name. The app uses a menu rather than selectable text, because selecting text would select only the word under the finger.
-- **Loaded:** `subscribers_count` comes from the Repository API through `repoDetailProvider` (`lib/state/repo_detail_provider.dart`), an `autoDispose` family keyed by full name, so reopening a repository loads its latest count. Like search, it never retries on its own: unauthenticated clients get 60 of these requests an hour.
+- **Loaded:** `subscribers_count` comes from the Repository API through `repoDetailProvider` (`lib/state/repo_detail_provider.dart`), an `autoDispose` family keyed by full name, so reopening a repository fetches its count again once no other screen is listening to that repository. A detail screen retained in the other tab can keep the same provider alive. Like search, it never retries on its own: unauthenticated clients get 60 of these requests an hour.
 - **States of the subscriber count:** a loading indicator; the count with thousands separators; or the error with a Retry button. A deleted repository (404) says it no longer exists and offers no retry, since retrying can't bring it back. The rest of the screen, including the star, stays usable.
 - **Stars stay in sync:** the star button watches the same `isStarredProvider(id)` as the list rows, so starring here shows in the list on returning, without reloading anything.
 - **Wide screens:** the content is at most 560 pixels wide, centered, so it stays readable on an iPad.
@@ -291,7 +313,7 @@ The Stars tab (`lib/ui/stars/`) lists the starred repositories, most recently st
 - **Empty state** when nothing is starred, pointing to Search.
 - **In sync with the other screens:** it watches `favoritesProvider`, so stars added or removed in Search or on the detail screen show immediately, and unstarring here updates their star buttons. Widget tests drive the whole shell to check this end to end.
 - **Tapping a row** opens the [detail screen](#detail-screen), as in Search.
-- Stars are stored on the device, so the tab works offline; only the avatars need the network.
+- Stars are stored on the device, so the tab works offline, and avatars seen before come from the [disk cache](#avatars).
 
 ## Favorites
 
@@ -330,11 +352,33 @@ All favorites are stored under one key, `favorites`, as a JSON array of the fiel
 ### Corrupt data and failed saves
 
 - **Unreadable stored data** (not JSON, not an array, or the wrong type) loads as no favorites instead of crashing. Invalid entries and duplicate ids are skipped, and the valid entries are kept. The bad data is replaced on the next change.
-- **Failed saves.** If a save fails, `toggle` throws so the UI can tell the user. Once no other save is pending, the notifier reloads what is actually stored and shows that. It doesn't undo just the failed change, because a later save writes the whole list and may already contain it.
+- **Failed saves.** If a save fails, `toggle` throws so the UI can tell the user. The notifier attempts to reload storage and applies the stored list if no other save is pending. If reloading also fails, it keeps the current in-memory list; the next successful save persists that list. It doesn't undo just the failed change, because a later save writes the whole list and may already contain it.
+
+### How many favorites it handles
+
+Every change encodes the whole list as JSON on the UI isolate and writes it; startup decodes it once. Measured on an iPhone in a profile build, with worst-case entries (140-character names), median of 7 runs. "UI blocked" is the longest time the UI isolate couldn't draw; a frame is 16.7 ms at 60 Hz and 8.3 ms at 120 Hz.
+
+| Favorites (stored size) | Save, UI blocked | Load at startup |
+|---|---|---|
+| 1,000 (245 KB) | 2–3 ms | 2.5 ms |
+| 10,000 (2.4 MB) | 17 ms | 17 ms |
+
+- **Up to a few thousand favorites, nothing to optimize.** Saving and loading take a few milliseconds. Favorites are starred one tap at a time, so real lists are far smaller.
+- **Around 10,000, each star costs about one frame** at 60 Hz (two at 120 Hz). Loading also takes 17 ms, but once, behind the startup background, so it doesn't show.
+
+Options measured for larger lists, and why none is used:
+
+| Option | Effect | Cost |
+|---|---|---|
+| Encode in a background isolate (`Isolate.run`) | Saving 10,000: UI blocked 17 → 4 ms. Loading in an isolate: 17 → 3 ms. At 1,000 the UI time doesn't change and the total time grows by ~2 ms (starting an isolate). | More moving parts in saving and loading, and widget tests must run isolates under `runAsync`, for no gain at real sizes. The first thing to add if lists grow. |
+| A compact format (`[id, full_name, avatar user id]` instead of GitHub's fields and the full avatar URL) | 34–64% smaller; encoding ~35–40% faster, decoding 50–70% faster (measured on a Mac) | The assignment asks to store `owner.avatar_url`; the URL would have to be rebuilt from GitHub's format; storage could no longer share `GitHubRepo.fromJson` with the API; stored data would need migrating. Less gain than an isolate. |
+| A database with per-row writes (e.g. SQLite) | Each change writes one row instead of the whole list | Another package, and the assignment asks for shared_preferences, which is meant for small data anyway. The fix if lists grew to tens of thousands. |
+
+So the list is kept as plain JSON in shared_preferences, encoded on the UI isolate, and moving the encoding to an isolate is the first step if favorites ever need to scale.
 
 ### Testing favorites
 
-Tests replace the platform store with `InMemorySharedPreferencesAsync` from [shared_preferences_platform_interface](https://pub.dev/packages/shared_preferences_platform_interface). It is shared_preferences' own platform package and already a transitive dependency. It is listed as a dev dependency only so tests can import it, and it isn't part of the app. `test/helpers/preferences.dart` also has a store whose writes and reads a test can hold, fail or complete in any order, to cover concurrent saves.
+Tests replace the platform store with `InMemorySharedPreferencesAsync` from [shared_preferences_platform_interface](https://pub.dev/packages/shared_preferences_platform_interface). It is shared_preferences' own platform package, which the app already depends on through shared_preferences; it is also listed as a dev dependency only so tests can import its in-memory backend directly. `test/helpers/preferences.dart` also has a store whose writes and reads a test can hold, fail or complete in any order, to cover concurrent saves.
 
 ## App Startup
 
@@ -348,14 +392,6 @@ Tests replace the platform store with `InMemorySharedPreferencesAsync` from [sha
 
 - **Why preferences load before the app shows.** Favorites are read from them. Loading them first means `sharedPreferencesProvider` reads synchronously (`requireValue` on the loaded value), so no screen needs a loading state for favorites and a star never flickers from empty to filled.
 - **Why not before `runApp`.** If loading throws (e.g. a corrupt preferences file or a platform channel error), `runApp` would never run and the app would stay on the native launch screen until the user killed it.
-- **Cost.** `SharedPreferencesWithCache.create` on a cold start (debug build, 5 runs each):
-
-  | Device | Min | Median | Max |
-  |---|---|---|---|
-  | iPhone SE simulator (iOS) | 15 ms | 38 ms | 51 ms |
-  | Android emulator (`Medium_Phone`) | 47 ms | 89 ms | 198 ms |
-
-  The app's first screen still waits this long, but behind the same background as the launch screen (white, or black in dark mode). Profile-mode measurements on real devices can follow with the performance work in [#11](https://github.com/ruby109/flutter_github_repo_viewer/issues/11).
 
 ## Dark Mode
 
@@ -389,6 +425,7 @@ See [AGENTS.md](AGENTS.md) for exactly what each hook runs.
 ## Testing
 
 ```sh
+dart format --output=none --set-exit-if-changed .  # check formatting
 flutter test --exclude-tags golden    # unit and widget tests
 dart analyze --fatal-infos            # analyzer, including riverpod_lint
 ```
@@ -401,6 +438,8 @@ dart analyze --fatal-infos            # analyzer, including riverpod_lint
   scripts/update-goldens.sh
   ```
 
+  This requires the GitHub CLI (`gh`), authenticated with access to run workflows on this repository. Run it from the branch you pushed; it regenerates the images on Linux, commits them remotely and pulls that commit with `--ff-only`.
+
 - **Real data, no network:** `test/fixtures/` holds real GitHub responses and avatars (refresh with `dart run tool/fetch_fixtures.dart`); `MockClient` and `withAvatarFixtures` serve them.
 
 CI runs format, analyze and the tests on every push to `main` and on pull requests.
@@ -411,7 +450,8 @@ CI runs format, analyze and the tests on every push to `main` and on pull reques
 - **1,000 results per search**, GitHub's limit; the list says so when it is reached.
 - **Stars are local** to the device, as the assignment asks; they are not synced with the user's GitHub stars.
 - **No undo** after unstarring in the Stars tab.
-- **Performance** has been checked in simulators and debug builds only; profile-mode measurements on devices are tracked in [#11](https://github.com/ruby109/flutter_github_repo_viewer/issues/11).
+- **Very large favorites lists.** Around 10,000 favorites, each star costs about one frame on an iPhone (see [How many favorites it handles](#how-many-favorites-it-handles)); far more than starring one at a time produces.
+- **Scrolling performance** has not yet been profiled on devices; that is tracked in [#11](https://github.com/ruby109/flutter_github_repo_viewer/issues/11).
 
 ## Contributing
 
