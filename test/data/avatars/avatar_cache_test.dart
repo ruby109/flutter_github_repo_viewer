@@ -274,7 +274,9 @@ void main() {
       // Left behind if the app is killed while writing.
       test('removes leftover temporary files', () async {
         final cache = await filled(1, maxBytes: 1000);
-        File('${directory.path}/leftover.tmp').writeAsBytesSync([1]);
+        File('${directory.path}/leftover.tmp')
+          ..writeAsBytesSync([1])
+          ..setLastModifiedSync(now.subtract(const Duration(hours: 1)));
 
         await cache.trim();
 
@@ -282,6 +284,30 @@ void main() {
           cachedFiles().map((file) => file.path),
           everyElement(isNot(endsWith('.tmp'))),
         );
+      });
+
+      // The app can go to the background while an avatar is being stored.
+      test('keeps temporary files still being written', () async {
+        final cache = await filled(1, maxBytes: 1000);
+        File('${directory.path}/writing.tmp')
+          ..writeAsBytesSync([1])
+          ..setLastModifiedSync(now);
+
+        await cache.trim();
+
+        expect(
+          cachedFiles().map((file) => file.path),
+          contains(endsWith('writing.tmp')),
+        );
+      });
+
+      // Trimming is optional upkeep, so it mustn't fail the app.
+      test('copes with a directory it cannot read', () async {
+        final cache = await filled(1, maxBytes: 1000);
+        Process.runSync('chmod', ['000', directory.path]);
+        addTearDown(() => Process.runSync('chmod', ['700', directory.path]));
+
+        await cache.trim();
       });
 
       // Two passes picking the same file to delete must not fail.
@@ -308,6 +334,41 @@ void main() {
         directory.deleteSync(recursive: true);
 
         await cacheWith(found).trim();
+      });
+    });
+
+    // trim can delete a file between load finding it and reading it.
+    group('with a cached file it cannot read', () {
+      /// Replaces the cached [pixels] file with a directory, which exists
+      /// and is fresh but fails to read.
+      void unreadable(int pixels) {
+        final file = cachedFiles().singleWhere(
+          (file) => file.path.endsWith('_$pixels'),
+        );
+        file.deleteSync();
+        Directory(file.path).createSync();
+      }
+
+      test('downloads the avatar again', () async {
+        final cache = cacheWith(found);
+        await load(cache, 80);
+        unreadable(80);
+
+        expect(await load(cache, 80), 'size 80');
+        expect(requests, hasLength(2));
+      });
+
+      test('falls back to another size when offline', () async {
+        var online = true;
+        final cache = cacheWith(
+          (request) => online ? found(request) : offline(request),
+        );
+        await load(cache, 120);
+        await load(cache, 288);
+        unreadable(288);
+        online = false;
+
+        expect(await load(cache, 288), 'size 120');
       });
     });
 

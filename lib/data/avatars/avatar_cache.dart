@@ -60,7 +60,8 @@ class AvatarCache {
     for (final file in _largerFirst(cached, size)) {
       final stat = await file.stat();
       if (stat.type == FileSystemEntityType.notFound) continue;
-      if (_now().difference(stat.modified) < maxAge) return _read(file);
+      if (_now().difference(stat.modified) >= maxAge) continue;
+      if (await _read(file) case final bytes?) return bytes;
     }
     final Uint8List bytes;
     try {
@@ -71,7 +72,7 @@ class AvatarCache {
         ..._largerFirst(cached, size),
         ..._smallerFirst(cached, size),
       ]) {
-        if (await file.exists()) return _read(file);
+        if (await _read(file) case final bytes?) return bytes;
       }
       rethrow;
     }
@@ -100,19 +101,31 @@ class AvatarCache {
   ///
   /// Old files stay while there is room: offline, they are all there is.
   /// Passes may overlap: a file another pass already deleted is skipped.
+  /// Trimming is upkeep, so a file system error ends it rather than
+  /// failing the caller.
   Future<void> trim() async {
+    try {
+      await _trim();
+    } on FileSystemException {
+      // Tried again the next time the app is hidden.
+    }
+  }
+
+  Future<void> _trim() async {
     if (!await directory.exists()) return;
     final files = <({File file, FileStat stat})>[];
     await for (final entity in directory.list()) {
       if (entity is! File) continue;
+      final stat = await entity.stat();
+      if (stat.type == FileSystemEntityType.notFound) continue;
       if (entity.path.endsWith(_temporarySuffix)) {
-        await _delete(entity);
+        // A recent one may still be being written.
+        if (_now().difference(stat.modified) >= _abandonedAfter) {
+          await _delete(entity);
+        }
         continue;
       }
-      final stat = await entity.stat();
-      if (stat.type != FileSystemEntityType.notFound) {
-        files.add((file: entity, stat: stat));
-      }
+      files.add((file: entity, stat: stat));
     }
     files.sort((a, b) => a.stat.accessed.compareTo(b.stat.accessed));
     var total = files.fold<int>(0, (sum, entry) => sum + entry.stat.size);
@@ -154,10 +167,20 @@ class AvatarCache {
       cached[pixels]!,
   ];
 
-  /// Reads [file] and marks it as just used.
-  Future<Uint8List> _read(File file) async {
-    final bytes = await file.readAsBytes();
-    await file.setLastAccessed(_now());
+  /// Reads [file] and marks it as just used, or returns null if it can't
+  /// be read, e.g. because [trim] just deleted it.
+  Future<Uint8List?> _read(File file) async {
+    final Uint8List bytes;
+    try {
+      bytes = await file.readAsBytes();
+    } on FileSystemException {
+      return null;
+    }
+    try {
+      await file.setLastAccessed(_now());
+    } on FileSystemException {
+      // Still shown; it just looks less recently used to trim.
+    }
     return bytes;
   }
 
@@ -197,6 +220,10 @@ class AvatarCache {
   }
 
   static const _temporarySuffix = '.tmp';
+
+  /// How old a temporary file must be before [trim] treats it as left
+  /// behind by a write that never finished; writes take far less.
+  static const _abandonedAfter = Duration(minutes: 1);
 
   static bool _resizes(Uri url) => url.host == _gitHubAvatarHost;
 

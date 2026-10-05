@@ -34,7 +34,10 @@ void main() {
       tester,
     ) async {
       final leftover = File('${directory.path}/leftover.tmp')
-        ..writeAsBytesSync([1]);
+        ..writeAsBytesSync([1])
+        ..setLastModifiedSync(
+          DateTime.now().subtract(const Duration(hours: 1)),
+        );
       containerFor(directory).read(avatarCacheProvider);
 
       tester.binding
