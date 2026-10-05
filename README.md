@@ -355,13 +355,13 @@ Tests replace the platform store with `InMemorySharedPreferencesAsync` from [sha
   | iPhone SE simulator (iOS) | 15 ms | 38 ms | 51 ms |
   | Android emulator (`Medium_Phone`) | 47 ms | 89 ms | 198 ms |
 
-  The app's first screen still waits this long, but behind the same background as the launch screen. Profile-mode measurements on real devices can follow with the performance work in [#11](https://github.com/ruby109/flutter_github_repo_viewer/issues/11).
+  The app's first screen still waits this long, but behind the same background as the launch screen (white, or black in dark mode). Profile-mode measurements on real devices can follow with the performance work in [#11](https://github.com/ruby109/flutter_github_repo_viewer/issues/11).
 
 ## Dark Mode
 
 The app follows the system's light or dark mode; there is no in-app switch.
 
-- **Themes:** `AppTheme` (`lib/ui/app_theme.dart`) builds a light and a dark Material 3 theme from the same seed color, and `MyApp` passes both to `MaterialApp`. Widgets take their colors from the theme's color scheme; the only fixed color is the star's amber, which reads well on both backgrounds.
+- **Themes:** `AppTheme` (`lib/ui/app_theme.dart`) builds a light and a dark Material 3 theme from the same seed color, and `MyApp` passes both to `MaterialApp`. Widgets take their colors from the theme's color scheme. The only fixed colors are the star's amber, which reads well on both backgrounds, and the startup loading background, which is white or black on purpose to match the native launch screens.
 - **Launch:** the native launch screens and the startup loading background are white in light mode and black in dark mode (see [App Startup](#app-startup)), so nothing flashes on the way to the first screen.
 - **Goldens:** golden tests render with the app's own themes, and the main screens also have dark goldens.
 
