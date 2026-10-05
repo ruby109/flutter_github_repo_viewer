@@ -220,6 +220,14 @@ Tests replace the platform store with `InMemorySharedPreferencesAsync` from [sha
 
   The app's first screen still waits this long, but behind the same white background as the launch screen. Profile-mode measurements on real devices can follow with the performance work in [#11](https://github.com/ruby109/flutter_github_repo_viewer/issues/11).
 
+## Dark Mode
+
+The app follows the system's light or dark mode; there is no in-app switch.
+
+- **Themes:** `AppTheme` (`lib/ui/app_theme.dart`) builds a light and a dark Material 3 theme from the same seed color, and `MyApp` passes both to `MaterialApp`. Widgets take their colors from the theme's color scheme; the only fixed color is the star's amber, which reads well on both backgrounds.
+- **Launch:** the native launch screens and the startup loading background are white in light mode and black in dark mode (see [App Startup](#app-startup)), so nothing flashes on the way to the first screen.
+- **Goldens:** golden tests render with the app's own themes, and the main screens also have dark goldens.
+
 ## Development Setup
 
 Git hooks that format, analyze and test your changes, and check commit messages, are managed by [lefthook](https://lefthook.dev):
