@@ -334,6 +334,28 @@ All favorites are stored under one key, `favorites`, as a JSON array of the fiel
 - **Unreadable stored data** (not JSON, not an array, or the wrong type) loads as no favorites instead of crashing. Invalid entries and duplicate ids are skipped, and the valid entries are kept. The bad data is replaced on the next change.
 - **Failed saves.** If a save fails, `toggle` throws so the UI can tell the user. The notifier attempts to reload storage and applies the stored list if no other save is pending. If reloading also fails, it keeps the current in-memory list; the next successful save persists that list. It doesn't undo just the failed change, because a later save writes the whole list and may already contain it.
 
+### How many favorites it handles
+
+Every change encodes the whole list as JSON on the UI isolate and writes it; startup decodes it once. Measured on an iPhone in a profile build, with worst-case entries (140-character names), median of 7 runs. "UI blocked" is the longest time the UI isolate couldn't draw; a frame is 16.7 ms at 60 Hz and 8.3 ms at 120 Hz.
+
+| Favorites (stored size) | Save, UI blocked | Load at startup |
+|---|---|---|
+| 1,000 (245 KB) | 2–3 ms | 2.5 ms |
+| 10,000 (2.4 MB) | 17 ms | 17 ms |
+
+- **Up to a few thousand favorites, nothing to optimize.** Saving and loading take a few milliseconds. Favorites are starred one tap at a time, so real lists are far smaller.
+- **Around 10,000, each star costs about one frame** at 60 Hz (two at 120 Hz). Loading also takes 17 ms, but once, behind the startup background, so it doesn't show.
+
+Options measured for larger lists, and why none is used:
+
+| Option | Effect | Cost |
+|---|---|---|
+| Encode in a background isolate (`Isolate.run`) | Saving 10,000: UI blocked 17 → 4 ms. Loading in an isolate: 17 → 3 ms. At 1,000 the UI time doesn't change and the total time grows by ~2 ms (starting an isolate). | More moving parts in saving and loading, and widget tests must run isolates under `runAsync`, for no gain at real sizes. The first thing to add if lists grow. |
+| A compact format (`[id, full_name, avatar user id]` instead of GitHub's fields and the full avatar URL) | 34–64% smaller; encoding ~35–40% faster, decoding 50–70% faster (measured on a Mac) | The assignment asks to store `owner.avatar_url`; the URL would have to be rebuilt from GitHub's format; storage could no longer share `GitHubRepo.fromJson` with the API; stored data would need migrating. Less gain than an isolate. |
+| A database with per-row writes (e.g. SQLite) | Each change writes one row instead of the whole list | Another package, and the assignment asks for shared_preferences, which is meant for small data anyway. The fix if lists grew to tens of thousands. |
+
+So the list is kept as plain JSON in shared_preferences, encoded on the UI isolate, and moving the encoding to an isolate is the first step if favorites ever need to scale.
+
 ### Testing favorites
 
 Tests replace the platform store with `InMemorySharedPreferencesAsync` from [shared_preferences_platform_interface](https://pub.dev/packages/shared_preferences_platform_interface). It is shared_preferences' own platform package, which the app already depends on through shared_preferences; it is also listed as a dev dependency only so tests can import its in-memory backend directly. `test/helpers/preferences.dart` also has a store whose writes and reads a test can hold, fail or complete in any order, to cover concurrent saves.
@@ -408,7 +430,8 @@ CI runs format, analyze and the tests on every push to `main` and on pull reques
 - **1,000 results per search**, GitHub's limit; the list says so when it is reached.
 - **Stars are local** to the device, as the assignment asks; they are not synced with the user's GitHub stars.
 - **No undo** after unstarring in the Stars tab.
-- **Performance** has been checked in simulators and debug builds only; profile-mode measurements on devices are tracked in [#11](https://github.com/ruby109/flutter_github_repo_viewer/issues/11).
+- **Very large favorites lists.** Around 10,000 favorites, each star costs about one frame on an iPhone (see [How many favorites it handles](#how-many-favorites-it-handles)); far more than starring one at a time produces.
+- **Scrolling performance** has not yet been profiled on devices; that is tracked in [#11](https://github.com/ruby109/flutter_github_repo_viewer/issues/11).
 
 ## Contributing
 
