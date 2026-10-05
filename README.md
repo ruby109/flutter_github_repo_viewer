@@ -132,7 +132,12 @@ The Search tab (`lib/ui/search/`) searches repositories by keyword. Its state is
 
 ## Detail Screen
 
-Tapping a search result pushes `RepoDetailScreen` (`lib/ui/detail/`) over the tabs; its back button returns to the list where it was left.
+Tapping a search result opens `RepoDetailScreen` (`lib/ui/detail/`) within the tab, under the navigation bar.
+
+- **Each tab has its own navigator** (`HomeShell`), so a tab keeps the screens opened in it while another tab is shown, and returns to the list where it was left.
+- **Back:** the back button, the iOS edge swipe and Android's system back close the shown tab's screens; system back on a tab's first screen is left to the system. Hidden tabs are never popped.
+- **Tapping the shown tab again** returns to its first screen, as in iOS apps.
+
 
 - **Shown at once:** the owner avatar (96 pixels), `full_name` and the star button come from the search result, so they don't wait for the network.
 - **Loaded:** `subscribers_count` comes from the Repository API through `repoDetailProvider` (`lib/state/repo_detail_provider.dart`), an `autoDispose` family keyed by full name, so reopening a repository loads its latest count. Like search, it never retries on its own: unauthenticated clients get 60 of these requests an hour.
