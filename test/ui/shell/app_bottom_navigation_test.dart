@@ -31,15 +31,15 @@ void main() {
       }
     });
 
-    testWidgets('highlights the current tab with its selected icon', (
-      tester,
-    ) async {
+    // A Material 3 navigation bar marks the current tab with an indicator
+    // behind its icon, so it is obvious even for the Search tab, whose icon
+    // is the same selected or not.
+    testWidgets('highlights the current tab with an indicator', (tester) async {
       await pumpNavigation(tester, currentTab: AppTab.favorites);
 
-      final navBar = tester.widget<BottomNavigationBar>(
-        find.byType(BottomNavigationBar),
-      );
-      expect(navBar.currentIndex, AppTab.favorites.index);
+      final navBar = tester.widget<NavigationBar>(find.byType(NavigationBar));
+      expect(navBar.selectedIndex, AppTab.favorites.index);
+      expect(find.byType(NavigationIndicator), findsNWidgets(2));
       expect(find.byIcon(AppTab.favorites.selectedIcon), findsOneWidget);
       expect(find.byIcon(AppTab.favorites.icon), findsNothing);
     });
