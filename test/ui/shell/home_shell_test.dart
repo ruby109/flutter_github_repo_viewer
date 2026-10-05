@@ -165,6 +165,12 @@ void main() {
 
         expect(find.byType(RepoDetailScreen), findsOneWidget);
         expect(find.text('3,546'), findsOneWidget);
+        // Opened within the Stars tab, under the navigation bar.
+        expect(find.byType(BottomNavigationBar).hitTestable(), findsOneWidget);
+
+        await openTab(tester, AppTab.search);
+
+        expect(find.byType(RepoDetailScreen).hitTestable(), findsNothing);
       });
     });
 
@@ -205,6 +211,92 @@ void main() {
           ),
           findsOneWidget,
         );
+      });
+    });
+
+    group('each tab keeps its own screens', () {
+      Future<void> openResult(WidgetTester tester) async {
+        await pumpSearched(tester);
+        await tester.tap(find.text('flutter/flutter'));
+        await tester.pumpAndSettle();
+      }
+
+      final detail = find.byType(RepoDetailScreen);
+
+      testWidgets('keeps the navigation bar under the detail screen', (
+        tester,
+      ) async {
+        await openResult(tester);
+
+        expect(detail, findsOneWidget);
+        expect(find.byType(BottomNavigationBar).hitTestable(), findsOneWidget);
+      });
+
+      testWidgets('system back returns from the detail screen to the list', (
+        tester,
+      ) async {
+        await openResult(tester);
+
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+
+        expect(detail, findsNothing);
+        expect(find.text('flutter/flutter'), findsOneWidget);
+      });
+
+      // On the first screen of a tab, the system decides (e.g. leaves the
+      // app on Android).
+      testWidgets('leaves system back on a first screen to the system', (
+        tester,
+      ) async {
+        await pumpSearched(tester);
+
+        final handled = await tester.binding.handlePopRoute();
+
+        expect(handled, isFalse);
+      });
+
+      testWidgets('system back leaves the screens of hidden tabs alone', (
+        tester,
+      ) async {
+        await openResult(tester);
+        await tester.tap(tabItem(AppTab.favorites));
+        await tester.pumpAndSettle();
+
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+        await tester.tap(tabItem(AppTab.search));
+        await tester.pumpAndSettle();
+
+        expect(detail.hitTestable(), findsOneWidget);
+      });
+
+      testWidgets('tapping the current tab returns to its first screen', (
+        tester,
+      ) async {
+        await openResult(tester);
+
+        await tester.tap(tabItem(AppTab.search));
+        await tester.pumpAndSettle();
+
+        expect(detail, findsNothing);
+        expect(find.text('flutter/flutter'), findsOneWidget);
+      });
+
+      testWidgets('keeps the detail screen open while on another tab', (
+        tester,
+      ) async {
+        await openResult(tester);
+
+        await tester.tap(tabItem(AppTab.favorites));
+        await tester.pumpAndSettle();
+
+        expect(detail.hitTestable(), findsNothing);
+
+        await tester.tap(tabItem(AppTab.search));
+        await tester.pumpAndSettle();
+
+        expect(detail.hitTestable(), findsOneWidget);
       });
     });
 
