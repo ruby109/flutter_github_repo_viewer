@@ -7,16 +7,6 @@ A Flutter app for iOS and Android that searches GitHub repositories and keeps a 
 - **Search**: find public repositories through the GitHub REST API.
 - **Stars**: save repositories locally and browse them later, offline.
 
-## Tech Stack
-
-| Concern | Choice |
-|---|---|
-| State management | [hooks_riverpod](https://pub.dev/packages/hooks_riverpod) + [flutter_hooks](https://pub.dev/packages/flutter_hooks) |
-| Networking | [http](https://pub.dev/packages/http) |
-| Local persistence | [shared_preferences](https://pub.dev/packages/shared_preferences) |
-| Testing | [shared_preferences_platform_interface](https://pub.dev/packages/shared_preferences_platform_interface) (dev only, for its in-memory store; see [Favorites](#testing-favorites)) |
-| Linting | [flutter_lints](https://pub.dev/packages/flutter_lints), [riverpod_lint](https://pub.dev/packages/riverpod_lint), strict analyzer modes |
-
 ## Requirements
 
 - Flutter 3.47 (stable channel) with Dart 3.13
@@ -127,6 +117,31 @@ Riverpod retries failed providers by default. That is turned off for everything 
 | Preferences fail to load at startup | An error screen with Retry instead of a launch screen that never goes away. |
 | Large accessibility text, long names, tablets | Text wraps instead of overflowing; content is width-limited on wide screens. |
 | Blank or whitespace-only search | The home state; no request is sent. |
+
+## Packages
+
+The assignment asks for `http` and `shared_preferences`, and `flutter_riverpod` or `hooks_riverpod`, and no other third-party packages unless they meaningfully improve the implementation.
+
+| Package | Kind | Why |
+|---|---|---|
+| [http](https://pub.dev/packages/http) | Required | GitHub REST API calls. Its `MockClient` also replaces the network in tests. |
+| [shared_preferences](https://pub.dev/packages/shared_preferences) | Required | Stores the starred repositories on the device (`SharedPreferencesWithCache`). |
+| [hooks_riverpod](https://pub.dev/packages/hooks_riverpod) | Required | State management and dependency injection. |
+| [flutter_hooks](https://pub.dev/packages/flutter_hooks) | Added | `hooks_riverpod` is built on it and already depends on it, so it adds no code to the app; it is listed only so the app can import it. Hooks keep a widget's own short-lived state with no `StatefulWidget` boilerplate and no forgotten `dispose`: the search box's `TextEditingController` (`useTextEditingController`), the selected tab (`useState`) and each tab's navigator key (`useMemoized`). |
+| [riverpod_lint](https://pub.dev/packages/riverpod_lint) | Added, analyzer plugin only | Flags Riverpod mistakes while coding, such as a family parameter without value equality (which would create a new provider on every rebuild), a matching pattern on an `AsyncValue` that mishandles null values, public state on a notifier, or a missing `ProviderScope`. It runs in `dart analyze` and adds nothing to the app. |
+| [flutter_lints](https://pub.dev/packages/flutter_lints) | Dev only | Flutter's recommended lints, from the project template. |
+| [shared_preferences_platform_interface](https://pub.dev/packages/shared_preferences_platform_interface) | Dev only | shared_preferences' own platform package, already a transitive dependency. Tests use its in-memory store (see [Testing favorites](#testing-favorites)). |
+
+Packages not used, and what the app does instead:
+
+| Common choice | Instead |
+|---|---|
+| go_router (`StatefulShellRoute`) | A `Navigator` per tab in `HomeShell`, with `NavigatorPopHandler` for system back |
+| cached_network_image | `Image.network` with avatars requested and decoded at the size shown (see [Avatars](#avatars)) |
+| intl | A small thousands-separator formatter for the subscriber count |
+| freezed, json_serializable | Hand-written `fromJson` with Dart 3 patterns, which validates the few fields the app uses |
+| mocktail, fake_async | `MockClient` from `http`, small hand-written fakes, and test-controlled `Completer`s |
+| golden_toolkit, alchemist | Flutter's built-in `matchesGoldenFile`, with a small helper for device sizes and fonts (`test/helpers/golden_devices.dart`) |
 
 ## GitHub API
 
