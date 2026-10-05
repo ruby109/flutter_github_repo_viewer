@@ -337,6 +337,23 @@ void main() {
       });
     });
 
+    // E.g. the directory is removed between checking and listing it.
+    test(
+      'downloads while the directory cannot be read, then retries',
+      () async {
+        await load(cacheWith(found), 80);
+        final cache = cacheWith(found);
+        Process.runSync('chmod', ['000', directory.path]);
+        addTearDown(() => Process.runSync('chmod', ['700', directory.path]));
+
+        expect(await load(cache, 80), 'size 80');
+
+        Process.runSync('chmod', ['700', directory.path]);
+        expect(await load(cache, 80), 'size 80');
+        expect(requests, hasLength(2));
+      },
+    );
+
     // trim can delete a file between load finding it and reading it.
     group('with a cached file it cannot read', () {
       /// Replaces the cached [pixels] file with a directory, which exists

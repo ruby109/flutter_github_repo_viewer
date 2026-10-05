@@ -40,8 +40,9 @@ class AvatarCache {
 
   static const _gitHubAvatarHost = 'avatars.githubusercontent.com';
 
-  /// Each avatar's cached sizes, built from [directory] on first use. It may
-  /// list files since deleted (by [trim] or the OS); [load] checks.
+  /// Each avatar's cached sizes, built from [directory] on first use (and
+  /// again after that fails). It may list files since deleted (by [trim] or
+  /// the OS); [load] checks.
   Future<Map<String, Map<int, File>>>? _index;
 
   var _writes = 0;
@@ -136,8 +137,19 @@ class AvatarCache {
     }
   }
 
-  Future<Map<int, File>> _cachedSizes(String avatar) async =>
-      (await (_index ??= _readIndex())).putIfAbsent(avatar, () => {});
+  /// The cached sizes of [avatar], or none if [directory] can't be read; the
+  /// next call reads it again.
+  Future<Map<int, File>> _cachedSizes(String avatar) async {
+    final pending = _index ??= _readIndex();
+    final Map<String, Map<int, File>> index;
+    try {
+      index = await pending;
+    } on FileSystemException {
+      if (identical(_index, pending)) _index = null;
+      return {};
+    }
+    return index.putIfAbsent(avatar, () => {});
+  }
 
   Future<Map<String, Map<int, File>>> _readIndex() async {
     final index = <String, Map<int, File>>{};
