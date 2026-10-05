@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:http/http.dart' as http;
@@ -85,6 +86,52 @@ void main() {
 
       response.complete(found());
       await tester.pump();
+    });
+
+    group('long-pressing the name', () {
+      testWidgets('copies the full name', (tester) async {
+        String? copied;
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          (call) async {
+            if (call.method == 'Clipboard.setData') {
+              copied =
+                  (call.arguments as Map<Object?, Object?>)['text'] as String?;
+            }
+            return null;
+          },
+        );
+        addTearDown(
+          () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            SystemChannels.platform,
+            null,
+          ),
+        );
+        await pumpScreen(tester, () async => found());
+        await tester.pump();
+
+        await tester.longPress(find.text('flutter/flutter'));
+        await tester.pump();
+
+        expect(copied, 'flutter/flutter');
+        expect(find.text('Copied flutter/flutter'), findsOneWidget);
+      });
+
+      testWidgets('tells screen readers it can be copied', (tester) async {
+        final semantics = tester.ensureSemantics();
+        await pumpScreen(tester, () async => found());
+        await tester.pump();
+
+        expect(
+          tester.getSemantics(find.text('flutter/flutter')),
+          matchesSemantics(
+            label: 'flutter/flutter',
+            hasLongPressAction: true,
+            onLongPressHint: 'Copy name',
+          ),
+        );
+        semantics.dispose();
+      });
     });
 
     testWidgets('loads the subscriber count', (tester) async {

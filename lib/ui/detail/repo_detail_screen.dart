@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../data/github/github_api_exception.dart';
@@ -37,10 +38,9 @@ class RepoDetailScreen extends StatelessWidget {
                 children: [
                   RepoAvatar(url: repo.owner?.avatarUrl, size: 96),
                   const SizedBox(height: 16),
-                  Text(
-                    repo.fullName,
+                  _CopyableName(
+                    fullName: repo.fullName,
                     style: textTheme.headlineSmall,
-                    textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 24),
                   _Subscribers(fullName: repo.fullName),
@@ -49,6 +49,37 @@ class RepoDetailScreen extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// The repository's full name; long-pressing it copies the whole name.
+///
+/// Copies directly rather than selecting text, which would select only the
+/// word under the finger (e.g. one half of `flutter/flutter`).
+class _CopyableName extends StatelessWidget {
+  const _CopyableName({required this.fullName, required this.style});
+
+  final String fullName;
+  final TextStyle? style;
+
+  Future<void> _copy(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    await Clipboard.setData(ClipboardData(text: fullName));
+    await HapticFeedback.mediumImpact();
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text('Copied $fullName')));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      onLongPressHint: 'Copy name',
+      child: GestureDetector(
+        onLongPress: () => _copy(context),
+        child: Text(fullName, style: style, textAlign: TextAlign.center),
       ),
     );
   }
