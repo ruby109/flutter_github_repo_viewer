@@ -47,13 +47,13 @@ flutter build ios --release --no-codesign  # iOS; sign and archive in Xcode to i
 
 ### Architecture
 
-Three layers, each depending only on the one below it:
+Three layers. Dependencies point downward (UI → state → data); nothing in a lower layer imports a higher one.
 
 | Layer | Folder | Contains |
 |---|---|---|
 | Data | `lib/data/` | `GitHubApiClient` and its sealed `GitHubApiException`s, the models (`GitHubRepo`, `SearchPage`, `RepoDetail`), and the preferences loader. No widgets and no app state. |
 | State | `lib/state/` | Riverpod providers and notifiers: the search query, search results, repository details and favorites. No widgets. |
-| UI | `lib/ui/` | One folder per screen (`search`, `detail`, `stars`, `shell`, `startup`), shared widgets in `common`, and the themes. Widgets read state through providers and never call the API or storage directly. |
+| UI | `lib/ui/` | One folder per screen (`search`, `detail`, `stars`, `shell`, `startup`), shared widgets in `common`, and the themes. Widgets read and change state only through providers: they never call the API client or storage themselves. They do use data-layer types directly, such as the models, the exceptions (to word errors) and the page size. |
 
 ```
 lib/
@@ -385,7 +385,7 @@ dart analyze --fatal-infos            # analyzer, including riverpod_lint
 
 - **Unit tests** cover the API client (requests, parsing, every error), the models, and every provider and notifier, including concurrent saves and pages arriving out of order.
 - **Widget tests** cover every screen and shared widget through its public API, and drive the whole `HomeShell` end to end: search, open a repository, star it, and see the star on every tab.
-- **Golden tests** render every screen state at iPhone 17, iPhone SE, iPad and Android phone sizes, the main screens also in dark mode. Font rendering differs between operating systems, so they run only on Linux CI, for every pull request. After an intended UI change, push the branch and regenerate them there:
+- **Golden tests** render the key states of every screen (loading and loaded states are also checked by widget tests) at iPhone 17, iPhone SE, iPad and Android phone sizes, the main screens also in dark mode. Font rendering differs between operating systems, so they run only on Linux CI, for every pull request. After an intended UI change, push the branch and regenerate them there:
 
   ```sh
   scripts/update-goldens.sh
