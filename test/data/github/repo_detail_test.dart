@@ -2,6 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:github_repo_viewer/data/github/repo_detail.dart';
 
+import '../../helpers/fixtures.dart';
+
 void main() {
   group('RepoDetail', () {
     Map<String, Object?> detailJson() => {
@@ -24,6 +26,17 @@ void main() {
         'https://avatars.githubusercontent.com/u/69631?v=4',
       );
       expect(detail.subscribersCount, 6600);
+    });
+
+    test('parses a real Repository API response', () {
+      final detail = RepoDetail.fromJson(repoDetailFixture());
+
+      expect(detail.repo.fullName, 'flutter/flutter');
+      expect(
+        detail.repo.owner?.avatarUrl,
+        'https://avatars.githubusercontent.com/u/14101776?v=4',
+      );
+      expect(detail.subscribersCount, greaterThan(0));
     });
 
     group('throws FormatException', () {
