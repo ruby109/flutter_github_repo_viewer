@@ -49,13 +49,13 @@ The Android release configuration currently uses the debug signing key. Store di
 
 ### Architecture
 
-Three layers. Dependencies point downward (UI → state → data); nothing in a lower layer imports a higher one.
+Three layers. Search, details and favorites flow through UI → state → data; avatar rendering uses the data-layer cache directly through an image provider. Nothing in a lower layer imports a higher one.
 
 | Layer | Folder | Contains |
 |---|---|---|
-| Data | `lib/data/` | `GitHubApiClient` and its sealed `GitHubApiException`s, the models (`GitHubRepo`, `SearchPage`, `RepoDetail`), and the preferences loader. No widgets and no app state. |
+| Data | `lib/data/` | `GitHubApiClient` and its sealed `GitHubApiException`s, the models (`GitHubRepo`, `SearchPage`, `RepoDetail`), the preferences loader, and the avatar disk cache. No screen widgets or search/favorites state; the avatar cache provider observes the app lifecycle to trim cached files in the background. |
 | State | `lib/state/` | Riverpod providers and notifiers: the search query, search results, repository details and favorites. No widgets. |
-| UI | `lib/ui/` | One folder per screen (`search`, `detail`, `stars`, `shell`, `startup`), shared widgets in `common`, and the themes. Widgets read and change state only through providers: they never call the API client or storage themselves. They do use data-layer types directly, such as the models, the exceptions (to word errors) and the page size. |
+| UI | `lib/ui/` | One folder per screen (`search`, `detail`, `stars`, `shell`, `startup`), shared widgets in `common`, and the themes. Screens read and change search, detail and favorites state through providers. `RepoAvatar` gets the cache through `avatarCacheProvider`, and `CachedAvatarImage` loads image bytes through that cache. They do use data-layer types directly, such as the models, the exceptions (to word errors) and the page size. |
 
 ```
 lib/
@@ -199,7 +199,7 @@ Fields used from each item (`GitHubRepo`):
 
 ### Errors
 
-Every failure is a subclass of the sealed `GitHubApiException`, so screens can `switch` over all of them:
+Transport, HTTP and response-parsing failures are mapped to subclasses of the sealed `GitHubApiException`, so screens can `switch` over them. Invalid client arguments throw `ArgumentError` or `RangeError` before a request is sent:
 
 | Exception | When | Shown as |
 |---|---|---|
@@ -406,7 +406,7 @@ The app follows the system's light or dark mode; there is no in-app switch.
 Material 3 throughout, with the platform's own behavior where users notice it:
 
 - **Navigation:** the back button shows the platform's arrow, iOS pages slide in from the right and close with the edge swipe, and Android's system back closes the shown tab's screens first. Tapping the shown tab again returns to its first screen.
-- **Tab bar:** a Material 3 `NavigationBar`, which marks the selected tab with an indicator behind its icon, so it is obvious even for the Search tab, whose icon doesn't change.
+- **Tab bar:** a `BottomNavigationBar`, as the assignment asks, with the current tab's icon on an indicator like Material 3's navigation bar (the icon's `activeIcon`), so the selected tab is obvious even for the Search tab, whose icon doesn't change.
 - **Loading indicators** are adaptive: the iOS activity indicator on iOS, Material's on Android.
 - **Copy menu:** long-pressing a repository's name shows the platform's own menu (see [Detail Screen](#detail-screen)).
 - **App icon:** an amber star on the app's purple. `tool/generate_app_icon.py` (Python with Pillow) draws every iOS size and the Android icons, including an adaptive icon with a monochrome layer for themed icons.
@@ -440,7 +440,7 @@ dart analyze --fatal-infos            # analyzer, including riverpod_lint
 
   This requires the GitHub CLI (`gh`), authenticated with access to run workflows on this repository. Run it from the branch you pushed; it regenerates the images on Linux, commits them remotely and pulls that commit with `--ff-only`.
 
-- **Real data, no network:** `test/fixtures/` holds real GitHub responses and avatars (refresh with `dart run tool/fetch_fixtures.dart`); `MockClient` and `withAvatarFixtures` serve them.
+- **Real data, no network:** `test/fixtures/` holds real GitHub responses and avatars (refresh with `dart run tool/fetch_fixtures.dart`); `MockClient` and `AvatarFixtures` serve them.
 
 CI runs format, analyze and the tests on every push to `main` and on pull requests.
 

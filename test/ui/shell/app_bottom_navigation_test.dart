@@ -31,17 +31,40 @@ void main() {
       }
     });
 
-    // A Material 3 navigation bar marks the current tab with an indicator
-    // behind its icon, so it is obvious even for the Search tab, whose icon
-    // is the same selected or not.
-    testWidgets('highlights the current tab with an indicator', (tester) async {
+    // The assignment asks for a BottomNavigationBar.
+    testWidgets('is a bottom navigation bar', (tester) async {
       await pumpNavigation(tester, currentTab: AppTab.favorites);
 
-      final navBar = tester.widget<NavigationBar>(find.byType(NavigationBar));
-      expect(navBar.selectedIndex, AppTab.favorites.index);
-      expect(find.byType(NavigationIndicator), findsNWidgets(2));
+      final bar = tester.widget<BottomNavigationBar>(
+        find.byType(BottomNavigationBar),
+      );
+      expect(bar.currentIndex, AppTab.favorites.index);
+    });
+
+    // Colour alone barely marks the Search tab, whose icon is the same
+    // selected or not, so the current tab's icon sits on an indicator.
+    testWidgets('highlights the current tab with an indicator', (tester) async {
+      await pumpNavigation(tester, currentTab: AppTab.search);
+
+      final indicator = find.byKey(AppBottomNavigation.indicatorKey);
+      expect(indicator, findsOneWidget);
+      expect(
+        find.descendant(
+          of: indicator,
+          matching: find.byIcon(AppTab.search.selectedIcon),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('shows the selected icon only for the current tab', (
+      tester,
+    ) async {
+      await pumpNavigation(tester, currentTab: AppTab.favorites);
+
       expect(find.byIcon(AppTab.favorites.selectedIcon), findsOneWidget);
       expect(find.byIcon(AppTab.favorites.icon), findsNothing);
+      expect(find.byIcon(AppTab.search.icon), findsOneWidget);
     });
 
     testWidgets('reports the tapped tab', (tester) async {
