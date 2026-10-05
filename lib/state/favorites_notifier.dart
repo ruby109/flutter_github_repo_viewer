@@ -30,7 +30,7 @@ final isStarredProvider = Provider.autoDispose.family<bool, int>(
 
 class FavoritesNotifier extends Notifier<List<GitHubRepo>> {
   /// The preferences key holding the favorites as a JSON array.
-  static const storageKey = 'favorites';
+  static const storageKey = PreferenceKeys.favorites;
 
   @override
   List<GitHubRepo> build() => _read(ref.watch(sharedPreferencesProvider));
