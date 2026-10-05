@@ -350,14 +350,6 @@ Tests replace the platform store with `InMemorySharedPreferencesAsync` from [sha
 
 - **Why preferences load before the app shows.** Favorites are read from them. Loading them first means `sharedPreferencesProvider` reads synchronously (`requireValue` on the loaded value), so no screen needs a loading state for favorites and a star never flickers from empty to filled.
 - **Why not before `runApp`.** If loading throws (e.g. a corrupt preferences file or a platform channel error), `runApp` would never run and the app would stay on the native launch screen until the user killed it.
-- **Cost.** `SharedPreferencesWithCache.create` on a cold start (debug build, 5 runs each):
-
-  | Device | Min | Median | Max |
-  |---|---|---|---|
-  | iPhone SE simulator (iOS) | 15 ms | 38 ms | 51 ms |
-  | Android emulator (`Medium_Phone`) | 47 ms | 89 ms | 198 ms |
-
-  The app's first screen still waits this long, but behind the same background as the launch screen (white, or black in dark mode). Profile-mode measurements on real devices can follow with the performance work in [#11](https://github.com/ruby109/flutter_github_repo_viewer/issues/11).
 
 ## Dark Mode
 
