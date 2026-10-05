@@ -406,7 +406,7 @@ The app follows the system's light or dark mode; there is no in-app switch.
 Material 3 throughout, with the platform's own behavior where users notice it:
 
 - **Navigation:** the back button shows the platform's arrow, iOS pages slide in from the right and close with the edge swipe, and Android's system back closes the shown tab's screens first. Tapping the shown tab again returns to its first screen.
-- **Tab bar:** a `BottomNavigationBar`, as the assignment asks, with the current tab's icon on an indicator like Material 3's navigation bar (the icon's `activeIcon`), so the selected tab is obvious even for the Search tab, whose icon doesn't change.
+- **Tab bar:** a `BottomNavigationBar`, as the assignment asks, with an indicator added behind the current tab's icon (through each item's `activeIcon`), like Material 3's navigation bar. Without it, the default style is hard to read: the selected tab differs only by a tint and a slightly larger label, and the Search icon looks the same selected or not, since the magnifying glass has no filled variant. The indicator makes the current tab obvious at a glance.
 - **Loading indicators** are adaptive: the iOS activity indicator on iOS, Material's on Android.
 - **Copy menu:** long-pressing a repository's name shows the platform's own menu (see [Detail Screen](#detail-screen)).
 - **App icon:** an amber star on the app's purple. `tool/generate_app_icon.py` (Python with Pillow) draws every iOS size and the Android icons, including an adaptive icon with a monochrome layer for themed icons.
