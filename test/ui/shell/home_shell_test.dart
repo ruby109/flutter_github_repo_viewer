@@ -12,6 +12,7 @@ import 'package:github_repo_viewer/ui/common/repo_list_tile.dart';
 import 'package:github_repo_viewer/ui/detail/repo_detail_screen.dart';
 
 import 'package:github_repo_viewer/ui/search/search_screen.dart';
+import 'package:github_repo_viewer/ui/shell/app_bottom_navigation.dart';
 import 'package:github_repo_viewer/ui/shell/app_tab.dart';
 import 'package:github_repo_viewer/ui/shell/home_shell.dart';
 import 'package:github_repo_viewer/ui/stars/stars_screen.dart';
@@ -67,7 +68,7 @@ void main() {
 
     /// The bottom navigation item for [tab]; screens may show its label too.
     Finder tabItem(AppTab tab) => find.descendant(
-      of: find.byType(NavigationBar),
+      of: find.byType(AppBottomNavigation),
       matching: find.text(tab.label),
     );
 
@@ -85,8 +86,9 @@ void main() {
       matching: find.byTooltip(tooltip),
     );
 
-    NavigationBar navBar(WidgetTester tester) =>
-        tester.widget<NavigationBar>(find.byType(NavigationBar));
+    AppTab currentTab(WidgetTester tester) => tester
+        .widget<AppBottomNavigation>(find.byType(AppBottomNavigation))
+        .currentTab;
 
     IndexedStack body(WidgetTester tester) =>
         tester.widget<IndexedStack>(find.byType(IndexedStack));
@@ -94,7 +96,7 @@ void main() {
     testWidgets('starts on the search tab', (tester) async {
       await pumpShell(tester);
 
-      expect(navBar(tester).selectedIndex, AppTab.search.index);
+      expect(currentTab(tester), AppTab.search);
       expect(body(tester).index, AppTab.search.index);
     });
 
@@ -166,7 +168,7 @@ void main() {
         expect(find.byType(RepoDetailScreen), findsOneWidget);
         expect(find.text('3,546'), findsOneWidget);
         // Opened within the Stars tab, under the navigation bar.
-        expect(find.byType(NavigationBar).hitTestable(), findsOneWidget);
+        expect(find.byType(AppBottomNavigation).hitTestable(), findsOneWidget);
 
         await openTab(tester, AppTab.search);
 
@@ -229,7 +231,7 @@ void main() {
         await openResult(tester);
 
         expect(detail, findsOneWidget);
-        expect(find.byType(NavigationBar).hitTestable(), findsOneWidget);
+        expect(find.byType(AppBottomNavigation).hitTestable(), findsOneWidget);
       });
 
       testWidgets('system back returns from the detail screen to the list', (
@@ -329,13 +331,13 @@ void main() {
       await tester.tap(tabItem(AppTab.favorites));
       await tester.pump();
 
-      expect(navBar(tester).selectedIndex, AppTab.favorites.index);
+      expect(currentTab(tester), AppTab.favorites);
       expect(body(tester).index, AppTab.favorites.index);
 
       await tester.tap(tabItem(AppTab.search));
       await tester.pump();
 
-      expect(navBar(tester).selectedIndex, AppTab.search.index);
+      expect(currentTab(tester), AppTab.search);
       expect(body(tester).index, AppTab.search.index);
     });
 
