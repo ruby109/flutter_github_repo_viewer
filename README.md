@@ -146,6 +146,16 @@ Tapping a search result opens `RepoDetailScreen` (`lib/ui/detail/`) within the t
 - **Stars stay in sync:** the star button watches the same `isStarredProvider(id)` as the list rows, so starring here shows in the list on returning, without reloading anything.
 - **Wide screens:** the content is at most 560 pixels wide, centered, so it stays readable on an iPad.
 
+## Stars Screen
+
+The Stars tab (`lib/ui/stars/`) lists the starred repositories, most recently starred first, from `favoritesProvider`.
+
+- **Unstarring** a repository with its star button removes its row at once and saves the change (see [Favorites](#favorites)).
+- **Empty state** when nothing is starred, pointing to Search.
+- **In sync with the other screens:** it watches `favoritesProvider`, so stars added or removed in Search or on the detail screen show immediately, and unstarring here updates their star buttons. Widget tests drive the whole shell to check this end to end.
+- **Tapping a row** opens the [detail screen](#detail-screen), as in Search.
+- Stars are stored on the device, so the tab works offline; only the avatars need the network.
+
 ## Favorites
 
 Starred repositories are stored on the device with `shared_preferences`. GitHub's own starring API isn't used, so no account is needed. The code is in `lib/state/favorites_notifier.dart`.

@@ -4,6 +4,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import '../../data/github/github_repo.dart';
 import '../detail/repo_detail_screen.dart';
 import '../search/search_screen.dart';
+import '../stars/stars_screen.dart';
 import 'app_bottom_navigation.dart';
 import 'app_tab.dart';
 
@@ -29,7 +30,7 @@ class HomeShell extends HookWidget {
       );
       return switch (tab) {
         AppTab.search => SearchScreen(onRepoTap: openRepo),
-        AppTab.favorites => Container(),
+        AppTab.favorites => StarsScreen(onRepoTap: openRepo),
       };
     }
 

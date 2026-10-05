@@ -14,6 +14,7 @@ import 'package:github_repo_viewer/ui/detail/repo_detail_screen.dart';
 import 'package:github_repo_viewer/ui/search/search_screen.dart';
 import 'package:github_repo_viewer/ui/shell/app_tab.dart';
 import 'package:github_repo_viewer/ui/shell/home_shell.dart';
+import 'package:github_repo_viewer/ui/stars/stars_screen.dart';
 
 import '../../helpers/github_json.dart';
 import '../../helpers/golden_devices.dart';
@@ -21,34 +22,22 @@ import '../../helpers/preferences.dart';
 
 void main() {
   group('HomeShell', () {
-    Future<void> pumpShell(WidgetTester tester) {
+    Future<void> pumpShell(WidgetTester tester) async {
       return tester.pumpWidget(
-        const ProviderScope(child: MaterialApp(home: HomeShell())),
+        ProviderScope(
+          overrides: [
+            sharedPreferencesProvider.overrideWithValue(
+              await inMemoryPreferences(),
+            ),
+          ],
+          child: const MaterialApp(home: HomeShell()),
+        ),
       );
     }
 
-    BottomNavigationBar navBar(WidgetTester tester) =>
-        tester.widget<BottomNavigationBar>(find.byType(BottomNavigationBar));
-
-    IndexedStack body(WidgetTester tester) =>
-        tester.widget<IndexedStack>(find.byType(IndexedStack));
-
-    testWidgets('starts on the search tab', (tester) async {
-      await pumpShell(tester);
-
-      expect(navBar(tester).currentIndex, AppTab.search.index);
-      expect(body(tester).index, AppTab.search.index);
-    });
-
-    testWidgets('shows the search screen on the search tab', (tester) async {
-      await pumpShell(tester);
-
-      expect(find.byType(SearchScreen), findsOneWidget);
-    });
-
     /// The shell over a GitHub API that finds `flutter/flutter` and
-    /// reports 3,546 subscribers for it.
-    Future<void> pumpWithApi(WidgetTester tester) async {
+    /// reports 3,546 subscribers for it, after searching `flutter`.
+    Future<void> pumpSearched(WidgetTester tester) async {
       final preferences = await inMemoryPreferences();
       await tester.pumpWidget(
         ProviderScope(
@@ -76,9 +65,118 @@ void main() {
       await tester.pumpAndSettle();
     }
 
+    /// The bottom navigation item for [tab]; screens may show its label too.
+    Finder tabItem(AppTab tab) => find.descendant(
+      of: find.byType(BottomNavigationBar),
+      matching: find.text(tab.label),
+    );
+
+    Future<void> openTab(WidgetTester tester, AppTab tab) async {
+      await tester.tap(tabItem(tab));
+      await tester.pumpAndSettle();
+    }
+
+    /// The star button of the `flutter/flutter` row in [screen].
+    Finder starIn(Type screen, String tooltip) => find.descendant(
+      of: find.descendant(
+        of: find.byType(screen),
+        matching: find.widgetWithText(RepoListTile, 'flutter/flutter'),
+      ),
+      matching: find.byTooltip(tooltip),
+    );
+
+    BottomNavigationBar navBar(WidgetTester tester) =>
+        tester.widget<BottomNavigationBar>(find.byType(BottomNavigationBar));
+
+    IndexedStack body(WidgetTester tester) =>
+        tester.widget<IndexedStack>(find.byType(IndexedStack));
+
+    testWidgets('starts on the search tab', (tester) async {
+      await pumpShell(tester);
+
+      expect(navBar(tester).currentIndex, AppTab.search.index);
+      expect(body(tester).index, AppTab.search.index);
+    });
+
+    testWidgets('shows the search screen on the search tab', (tester) async {
+      await pumpShell(tester);
+
+      expect(find.byType(SearchScreen), findsOneWidget);
+    });
+
+    testWidgets('shows the stars screen on the stars tab', (tester) async {
+      await pumpShell(tester);
+
+      await openTab(tester, AppTab.favorites);
+
+      expect(find.byType(StarsScreen), findsOneWidget);
+    });
+
+    group('stars stay in sync across tabs', () {
+      testWidgets('starring a search result adds it to the stars tab, and '
+          'unstarring it there updates the search list', (tester) async {
+        await pumpSearched(tester);
+
+        await tester.tap(starIn(SearchScreen, 'Star'));
+        await tester.pump();
+        await openTab(tester, AppTab.favorites);
+
+        expect(starIn(StarsScreen, 'Unstar'), findsOneWidget);
+
+        await tester.tap(starIn(StarsScreen, 'Unstar'));
+        await tester.pump();
+
+        expect(find.text(StarsScreen.emptyTitle), findsOneWidget);
+
+        await openTab(tester, AppTab.search);
+
+        expect(starIn(SearchScreen, 'Star'), findsOneWidget);
+      });
+
+      testWidgets('starring on the detail screen adds it to the stars tab', (
+        tester,
+      ) async {
+        await pumpSearched(tester);
+        await tester.tap(find.text('flutter/flutter'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byTooltip('Star'));
+        await tester.pump();
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+        await openTab(tester, AppTab.favorites);
+
+        expect(starIn(StarsScreen, 'Unstar'), findsOneWidget);
+      });
+
+      testWidgets('tapping a starred repository opens it', (tester) async {
+        await pumpSearched(tester);
+        await tester.tap(starIn(SearchScreen, 'Star'));
+        await tester.pump();
+        await openTab(tester, AppTab.favorites);
+
+        await tester.tap(
+          find.descendant(
+            of: find.byType(StarsScreen),
+            matching: find.text('flutter/flutter'),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byType(RepoDetailScreen), findsOneWidget);
+        expect(find.text('3,546'), findsOneWidget);
+        // Opened within the Stars tab, under the navigation bar.
+        expect(find.byType(BottomNavigationBar).hitTestable(), findsOneWidget);
+
+        await openTab(tester, AppTab.search);
+
+        expect(find.byType(RepoDetailScreen).hitTestable(), findsNothing);
+      });
+    });
+
     group('opening a repository', () {
       testWidgets('opens it when a search result is tapped', (tester) async {
-        await pumpWithApi(tester);
+        await pumpSearched(tester);
 
         await tester.tap(find.text('flutter/flutter'));
         await tester.pumpAndSettle();
@@ -96,7 +194,7 @@ void main() {
       testWidgets('shows the star changed there on returning to the list', (
         tester,
       ) async {
-        await pumpWithApi(tester);
+        await pumpSearched(tester);
         await tester.tap(find.text('flutter/flutter'));
         await tester.pumpAndSettle();
 
@@ -118,15 +216,10 @@ void main() {
 
     group('each tab keeps its own screens', () {
       Future<void> openResult(WidgetTester tester) async {
-        await pumpWithApi(tester);
+        await pumpSearched(tester);
         await tester.tap(find.text('flutter/flutter'));
         await tester.pumpAndSettle();
       }
-
-      Finder tabItem(AppTab tab) => find.descendant(
-        of: find.byType(BottomNavigationBar),
-        matching: find.text(tab.label),
-      );
 
       final detail = find.byType(RepoDetailScreen);
 
@@ -156,7 +249,7 @@ void main() {
       testWidgets('leaves system back on a first screen to the system', (
         tester,
       ) async {
-        await pumpWithApi(tester);
+        await pumpSearched(tester);
 
         final handled = await tester.binding.handlePopRoute();
 
@@ -233,13 +326,13 @@ void main() {
     ) async {
       await pumpShell(tester);
 
-      await tester.tap(find.text(AppTab.favorites.label));
+      await tester.tap(tabItem(AppTab.favorites));
       await tester.pump();
 
       expect(navBar(tester).currentIndex, AppTab.favorites.index);
       expect(body(tester).index, AppTab.favorites.index);
 
-      await tester.tap(find.text(AppTab.search.label));
+      await tester.tap(tabItem(AppTab.search));
       await tester.pump();
 
       expect(navBar(tester).currentIndex, AppTab.search.index);
@@ -251,14 +344,19 @@ void main() {
         for (final tab in AppTab.values) {
           testGoldens('${tab.name} tab', device, (tester) async {
             await tester.pumpWidget(
-              const ProviderScope(
-                child: MaterialApp(
+              ProviderScope(
+                overrides: [
+                  sharedPreferencesProvider.overrideWithValue(
+                    await inMemoryPreferences(),
+                  ),
+                ],
+                child: const MaterialApp(
                   debugShowCheckedModeBanner: false,
                   home: HomeShell(),
                 ),
               ),
             );
-            await tester.tap(find.text(tab.label));
+            await tester.tap(tabItem(tab));
             await tester.pumpAndSettle();
 
             await expectLater(
