@@ -7,6 +7,8 @@ A Flutter app for iOS and Android that searches GitHub repositories and keeps a 
 - **Search**: find public repositories through the GitHub REST API.
 - **Stars**: save repositories locally and browse them later, offline.
 
+**Contents:** [Screenshots](#screenshots) · [Getting Started](#getting-started) · [Key Implementation Points](#key-implementation-points) · [Packages](#packages) · [GitHub API](#github-api) · [Search](#search-screen) · [Detail](#detail-screen) · [Stars](#stars-screen) · [Favorites](#favorites) · [App Startup](#app-startup) · [Dark Mode](#dark-mode) · [Testing](#testing) · [Known Limitations](#known-limitations)
+
 ## Screenshots
 
 Rendered by the golden tests from real GitHub data, at iPhone 17 size.
@@ -29,8 +31,16 @@ Rendered by the golden tests from real GitHub data, at iPhone 17 size.
 ```sh
 git clone https://github.com/ruby109/flutter_github_repo_viewer.git
 cd flutter_github_repo_viewer
-flutter pub get
-flutter run            # pick a simulator/emulator, or pass -d <device-id>
+flutter pub get && flutter run    # pick a simulator/emulator, or pass -d <device-id>
+```
+
+No API key or configuration is needed: the app calls GitHub's public API without authentication.
+
+Release builds:
+
+```sh
+flutter build apk --release              # Android, build/app/outputs/flutter-apk/app-release.apk
+flutter build ios --release --no-codesign  # iOS; sign and archive in Xcode to install on a device
 ```
 
 ## Key Implementation Points
@@ -187,13 +197,15 @@ Fields used from each item (`GitHubRepo`):
 
 Every failure is a subclass of the sealed `GitHubApiException`, so screens can `switch` over all of them:
 
-| Exception | When |
-|---|---|
-| `RateLimitException` | 429, or 403 with `retry-after`, `x-ratelimit-remaining: 0` or a rate limit message. `retryAt` comes from `retry-after` or `x-ratelimit-reset` when GitHub sends them. |
-| `NotFoundException` | 404, e.g. a repository deleted after it was listed |
-| `HttpStatusException` | Any other non-2xx status, including a 403 that isn't rate limiting |
-| `NetworkException` | No connection, a dropped connection, a TLS failure, or a timeout |
-| `MalformedResponseException` | A 2xx body that isn't JSON or lacks required fields |
+| Exception | When | Shown as |
+|---|---|---|
+| `RateLimitException` | 429, or 403 with `retry-after`, `x-ratelimit-remaining: 0` or a rate limit message. `retryAt` comes from `retry-after` or `x-ratelimit-reset` when GitHub sends them. | "Too many requests", with the time to try again in the device's 12- or 24-hour format, or "Wait a minute"; Retry |
+| `NotFoundException` | 404, e.g. a repository deleted after it was listed | "This repository no longer exists"; no Retry on the detail screen |
+| `HttpStatusException` | Any other non-2xx status, including a 403 that isn't rate limiting | "Something went wrong", with the status code; Retry |
+| `NetworkException` | No connection, a dropped connection, a TLS failure, or a timeout | "No connection"; Retry |
+| `MalformedResponseException` | A 2xx body that isn't JSON or lacks required fields | "Something went wrong"; Retry |
+
+`describeError` (`lib/ui/common/error_message.dart`) turns each exception into these texts, so every screen words errors the same way.
 
 Unauthenticated clients get [10 searches a minute](https://docs.github.com/en/rest/search/search#rate-limit) and [60 other requests an hour](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api#primary-rate-limit-for-unauthenticated-users) per IP address, so rate limiting is an expected state, not an edge case.
 
@@ -262,6 +274,7 @@ Tapping a search result opens `RepoDetailScreen` (`lib/ui/detail/`) within the t
 - **Back:** the back button, the iOS edge swipe and Android's system back close the shown tab's screens; system back on a tab's first screen is left to the system. Hidden tabs are never popped.
 - **Tapping the shown tab again** returns to its first screen, as in iOS apps.
 
+On the screen:
 
 - **Shown at once:** the owner avatar (96 pixels), `full_name` and the star button come from the search result, so they don't wait for the network.
 - **Copying the name:** long-pressing `full_name` copies the whole name and confirms with a SnackBar. It copies directly instead of selecting text, which would select only the word under the finger.
@@ -342,7 +355,7 @@ Tests replace the platform store with `InMemorySharedPreferencesAsync` from [sha
   | iPhone SE simulator (iOS) | 15 ms | 38 ms | 51 ms |
   | Android emulator (`Medium_Phone`) | 47 ms | 89 ms | 198 ms |
 
-  The app's first screen still waits this long, but behind the same white background as the launch screen. Profile-mode measurements on real devices can follow with the performance work in [#11](https://github.com/ruby109/flutter_github_repo_viewer/issues/11).
+  The app's first screen still waits this long, but behind the same background as the launch screen. Profile-mode measurements on real devices can follow with the performance work in [#11](https://github.com/ruby109/flutter_github_repo_viewer/issues/11).
 
 ## Dark Mode
 
@@ -367,15 +380,28 @@ See [AGENTS.md](AGENTS.md) for exactly what each hook runs.
 
 ```sh
 flutter test --exclude-tags golden    # unit and widget tests
+dart analyze --fatal-infos            # analyzer, including riverpod_lint
 ```
 
-CI runs the same format, analyze and test checks on every push to `main` and on pull requests.
+- **Unit tests** cover the API client (requests, parsing, every error), the models, and every provider and notifier, including concurrent saves and pages arriving out of order.
+- **Widget tests** cover every screen and shared widget through its public API, and drive the whole `HomeShell` end to end: search, open a repository, star it, and see the star on every tab.
+- **Golden tests** render every screen state at iPhone 17, iPhone SE, iPad and Android phone sizes, the main screens also in dark mode. Font rendering differs between operating systems, so they run only on Linux CI, for every pull request. After an intended UI change, push the branch and regenerate them there:
 
-Golden (snapshot) tests render key screens at iPhone 17, iPhone SE, iPad and Android phone sizes. They run on Linux CI for every pull request; to regenerate the golden files after an intended UI change, push the branch and run:
+  ```sh
+  scripts/update-goldens.sh
+  ```
 
-```sh
-scripts/update-goldens.sh
-```
+- **Real data, no network:** `test/fixtures/` holds real GitHub responses and avatars (refresh with `dart run tool/fetch_fixtures.dart`); `MockClient` and `withAvatarFixtures` serve them.
+
+CI runs format, analyze and the tests on every push to `main` and on pull requests.
+
+## Known Limitations
+
+- **Rate limits.** Without signing in, GitHub allows 10 searches a minute and 60 other requests an hour per IP address. The app makes few requests (search only on submit, 100 results a page, no automatic retries) and explains the limit when it is reached, but cannot raise it.
+- **1,000 results per search**, GitHub's limit; the list says so when it is reached.
+- **Stars are local** to the device, as the assignment asks; they are not synced with the user's GitHub stars.
+- **No undo** after unstarring in the Stars tab.
+- **Performance** has been checked in simulators and debug builds only; profile-mode measurements on devices are tracked in [#11](https://github.com/ruby109/flutter_github_repo_viewer/issues/11).
 
 ## Contributing
 
