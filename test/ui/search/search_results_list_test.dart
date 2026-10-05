@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -39,6 +40,8 @@ void main() {
           overrides: [sharedPreferencesProvider.overrideWithValue(preferences)],
           child: MaterialApp(
             debugShowCheckedModeBanner: false,
+            theme: goldenTheme,
+            darkTheme: goldenDarkTheme,
             home: Scaffold(
               body: SearchResultsList(
                 results:
@@ -182,6 +185,19 @@ void main() {
 
         expect(spinner, findsOneWidget);
       });
+
+      testWidgets(
+        "uses the platform's loading indicator",
+        variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+        (tester) async {
+          await pumpList(
+            tester,
+            results: SearchResults(items: repos, totalCount: 90, hasMore: true),
+          );
+
+          expect(find.byType(CupertinoActivityIndicator), findsOneWidget);
+        },
+      );
 
       testWidgets('shows why loading more failed, with a retry button', (
         tester,

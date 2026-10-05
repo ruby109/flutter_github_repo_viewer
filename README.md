@@ -7,15 +7,19 @@ A Flutter app for iOS and Android that searches GitHub repositories and keeps a 
 - **Search**: find public repositories through the GitHub REST API.
 - **Stars**: save repositories locally and browse them later, offline.
 
-## Tech Stack
+**Contents:** [Screenshots](#screenshots) · [Getting Started](#getting-started) · [Key Implementation Points](#key-implementation-points) · [Packages](#packages) · [GitHub API](#github-api) · [Search](#search-screen) · [Detail](#detail-screen) · [Stars](#stars-screen) · [Favorites](#favorites) · [App Startup](#app-startup) · [Dark Mode](#dark-mode) · [Platform Conventions](#platform-conventions) · [Testing](#testing) · [Known Limitations](#known-limitations)
 
-| Concern | Choice |
-|---|---|
-| State management | [hooks_riverpod](https://pub.dev/packages/hooks_riverpod) + [flutter_hooks](https://pub.dev/packages/flutter_hooks) |
-| Networking | [http](https://pub.dev/packages/http) |
-| Local persistence | [shared_preferences](https://pub.dev/packages/shared_preferences) |
-| Testing | [shared_preferences_platform_interface](https://pub.dev/packages/shared_preferences_platform_interface) (dev only, for its in-memory store; see [Favorites](#testing-favorites)) |
-| Linting | [flutter_lints](https://pub.dev/packages/flutter_lints), [riverpod_lint](https://pub.dev/packages/riverpod_lint), strict analyzer modes |
+## Screenshots
+
+Rendered by the golden tests from real GitHub data, at iPhone 17 size.
+
+| Search | Results | Detail | Stars |
+|---|---|---|---|
+| <img src="test/ui/shell/goldens/home_shell_search_iphone_17.png" width="200" alt="Search tab, home state"> | <img src="test/ui/search/goldens/search_screen_results_iphone_17.png" width="200" alt="Search results with a starred row"> | <img src="test/ui/detail/goldens/repo_detail_screen_loaded_iphone_17.png" width="200" alt="Repository detail"> | <img src="test/ui/stars/goldens/stars_screen_starred_iphone_17.png" width="200" alt="Stars tab"> |
+
+| Rate limited | Results, dark | Detail, dark | Stars, dark |
+|---|---|---|---|
+| <img src="test/ui/search/goldens/search_screen_rate_limited_iphone_17.png" width="200" alt="Search rate limited"> | <img src="test/ui/search/goldens/search_screen_results_dark_iphone_17.png" width="200" alt="Search results in dark mode"> | <img src="test/ui/detail/goldens/repo_detail_screen_loaded_dark_iphone_17.png" width="200" alt="Repository detail in dark mode"> | <img src="test/ui/stars/goldens/stars_screen_starred_dark_iphone_17.png" width="200" alt="Stars tab in dark mode"> |
 
 ## Requirements
 
@@ -27,9 +31,139 @@ A Flutter app for iOS and Android that searches GitHub repositories and keeps a 
 ```sh
 git clone https://github.com/ruby109/flutter_github_repo_viewer.git
 cd flutter_github_repo_viewer
-flutter pub get
-flutter run            # pick a simulator/emulator, or pass -d <device-id>
+flutter pub get && flutter run    # pick a simulator/emulator, or pass -d <device-id>
 ```
+
+No API key or configuration is needed: the app calls GitHub's public API without authentication.
+
+Release builds:
+
+```sh
+flutter build apk --release              # Android, build/app/outputs/flutter-apk/app-release.apk
+flutter build ios --release --no-codesign  # iOS; sign and archive in Xcode to install on a device
+```
+
+## Key Implementation Points
+
+### Architecture
+
+Three layers. Dependencies point downward (UI → state → data); nothing in a lower layer imports a higher one.
+
+| Layer | Folder | Contains |
+|---|---|---|
+| Data | `lib/data/` | `GitHubApiClient` and its sealed `GitHubApiException`s, the models (`GitHubRepo`, `SearchPage`, `RepoDetail`), and the preferences loader. No widgets and no app state. |
+| State | `lib/state/` | Riverpod providers and notifiers: the search query, search results, repository details and favorites. No widgets. |
+| UI | `lib/ui/` | One folder per screen (`search`, `detail`, `stars`, `shell`, `startup`), shared widgets in `common`, and the themes. Widgets read and change state only through providers: they never call the API client or storage themselves. They do use data-layer types directly, such as the models, the exceptions (to word errors) and the page size. |
+
+```
+lib/
+├── main.dart                     runApp, MyApp (themes, AppStartupWidget → HomeShell)
+├── data/
+│   ├── github/                   API client, models, exceptions, client providers
+│   └── preferences/              loading SharedPreferencesWithCache
+├── state/                        search query/results, repo detail, favorites
+└── ui/
+    ├── shell/                    HomeShell: bottom navigation, a navigator per tab
+    ├── search/  detail/  stars/  the three screens
+    ├── startup/                  AppStartupWidget: loading, error and Retry
+    ├── common/                   RepoAvatar, RepoListTile, StarButton, StatusMessage, error texts
+    └── app_theme.dart            light and dark themes
+```
+
+How the pieces connect:
+
+```mermaid
+flowchart LR
+  subgraph UI
+    SearchScreen
+    RepoDetailScreen
+    StarsScreen
+    StarButton
+  end
+  subgraph State
+    query["searchQueryProvider"]
+    results["searchResultsProvider(query)"]
+    detail["repoDetailProvider(fullName)"]
+    favorites["favoritesProvider"]
+    starred["isStarredProvider(id)"]
+  end
+  subgraph Data
+    client["GitHubApiClient"]
+    prefs["SharedPreferencesWithCache"]
+  end
+  SearchScreen --> query --> results --> client
+  RepoDetailScreen --> detail --> client
+  StarsScreen --> favorites
+  StarButton -- watches --> starred --> favorites
+  StarButton -- "toggle(repo)" --> favorites --> prefs
+```
+
+### State management
+
+[hooks_riverpod](https://pub.dev/packages/hooks_riverpod) holds all shared state; hooks only hold a widget's own short-lived state (the search box's controller, the selected tab, each tab's navigator key).
+
+| Provider | Kind | Why |
+|---|---|---|
+| `httpClientProvider`, `gitHubApiClientProvider` | `Provider` | Injects the HTTP client; tests override it with `MockClient` instead of touching the network. |
+| `sharedPreferencesLoaderProvider` | `FutureProvider`, no automatic retry | Loads the preferences once at startup; Retry on the error screen loads again. |
+| `sharedPreferencesProvider` | `Provider` | The loaded preferences, read synchronously everywhere after startup. |
+| `searchQueryProvider` | `NotifierProvider<String>` | The submitted search text; empty means the home state. |
+| `searchResultsProvider(query)` | `AsyncNotifierProvider`, `autoDispose` family, no automatic retry | One result set per keyword, so a new search never shows the previous one's results; also loads the next pages. |
+| `repoDetailProvider(fullName)` | `FutureProvider`, `autoDispose` family, no automatic retry | Fetched when a detail screen opens, dropped when it closes. |
+| `favoritesProvider` | `NotifierProvider<List<GitHubRepo>>` | The single owner of the starred list, and `toggle`. |
+| `starredIdsProvider`, `isStarredProvider(id)` | `Provider`, then an `autoDispose` family | One repository's star, so a star button rebuilds only when its own star changes. |
+
+Riverpod retries failed providers by default. That is turned off for everything that calls GitHub or storage: unauthenticated clients get 10 searches a minute and 60 other requests an hour, which silent retries would use up, so the user retries with a button instead.
+
+### How favorites stay in sync
+
+`favoritesProvider` is the only place stars live. The search list, the detail screen and the Stars tab all read it, and every star button changes it through `toggle(repo)`. The change shows on every screen at once, before it is saved; a failed save is reported in a SnackBar and the screens show what is actually stored. Details are in [Favorites](#favorites).
+
+### Navigation
+
+`HomeShell` keeps each tab in an `IndexedStack` with its own `Navigator`, so the detail screen opens within the tab, under the navigation bar, and each tab keeps its screens while another is shown. Back closes the shown tab's screens; tapping the shown tab again returns to its first screen. Details are in [Detail Screen](#detail-screen).
+
+### Edge cases
+
+| Case | What happens |
+|---|---|
+| Rate limited (10 searches a minute, 60 detail requests an hour) | An error with Retry that says when to try again, if GitHub sent a time. No automatic retries. See [Errors](#errors). |
+| More than 1,000 matches | Paging stops at GitHub's 1,000-result limit and the end of the list says so. See [Pagination](#pagination). |
+| `total_count` overstates the results, or a page repeats a repository | An empty page ends paging; repeated repositories are skipped. |
+| A page arrives after the search changed or reloaded | It is dropped. |
+| Loading the next page fails | The loaded results stay; the end of the list shows the error with Retry. |
+| Repository deleted after it was listed (404) | The detail screen says it no longer exists, without a pointless Retry. |
+| Repository without an owner (`owner: null`) | A placeholder avatar. |
+| Stored favorites corrupt or from another version | Unreadable data loads as no favorites instead of crashing; valid entries are kept. |
+| A favorite fails to save | A SnackBar says so, and the screens show what is actually stored. |
+| Preferences fail to load at startup | An error screen with Retry instead of a launch screen that never goes away. |
+| Large accessibility text, long names, tablets | Text wraps instead of overflowing; content is width-limited on wide screens. |
+| Blank or whitespace-only search | The home state; no request is sent. |
+
+## Packages
+
+The assignment asks for `http` and `shared_preferences`, and `flutter_riverpod` or `hooks_riverpod`, and no other third-party packages unless they meaningfully improve the implementation.
+
+| Package | Kind | Why |
+|---|---|---|
+| [http](https://pub.dev/packages/http) | Required | GitHub REST API calls. Its `MockClient` also replaces the network in tests. |
+| [shared_preferences](https://pub.dev/packages/shared_preferences) | Required | Stores the starred repositories on the device (`SharedPreferencesWithCache`). |
+| [hooks_riverpod](https://pub.dev/packages/hooks_riverpod) | Required | State management and dependency injection. |
+| [flutter_hooks](https://pub.dev/packages/flutter_hooks) | Added | `hooks_riverpod` is built on it and already depends on it, so it adds no code to the app; it is listed only so the app can import it. Hooks keep a widget's own short-lived state with no `StatefulWidget` boilerplate and no forgotten `dispose`: the search box's `TextEditingController` (`useTextEditingController`), the selected tab (`useState`) and each tab's navigator key (`useMemoized`). |
+| [riverpod_lint](https://pub.dev/packages/riverpod_lint) | Added, analyzer plugin only | Flags Riverpod mistakes while coding, such as a family parameter without value equality (which would create a new provider on every rebuild), a matching pattern on an `AsyncValue` that mishandles null values, public state on a notifier, or a missing `ProviderScope`. It runs in `dart analyze` and adds nothing to the app. |
+| [flutter_lints](https://pub.dev/packages/flutter_lints) | Dev only | Flutter's recommended lints, from the project template. |
+| [shared_preferences_platform_interface](https://pub.dev/packages/shared_preferences_platform_interface) | Dev only | shared_preferences' own platform package, already a transitive dependency. Tests use its in-memory store (see [Testing favorites](#testing-favorites)). |
+
+Packages not used, and what the app does instead:
+
+| Common choice | Instead |
+|---|---|
+| go_router (`StatefulShellRoute`) | A `Navigator` per tab in `HomeShell`, with `NavigatorPopHandler` for system back |
+| cached_network_image | `Image.network` with avatars requested and decoded at the size shown (see [Avatars](#avatars)) |
+| intl | A small thousands-separator formatter for the subscriber count |
+| freezed, json_serializable | Hand-written `fromJson` with Dart 3 patterns, which validates the few fields the app uses |
+| mocktail, fake_async | `MockClient` from `http`, small hand-written fakes, and test-controlled `Completer`s |
+| golden_toolkit, alchemist | Flutter's built-in `matchesGoldenFile`, with a small helper for device sizes and fonts (`test/helpers/golden_devices.dart`) |
 
 ## GitHub API
 
@@ -63,13 +197,15 @@ Fields used from each item (`GitHubRepo`):
 
 Every failure is a subclass of the sealed `GitHubApiException`, so screens can `switch` over all of them:
 
-| Exception | When |
-|---|---|
-| `RateLimitException` | 429, or 403 with `retry-after`, `x-ratelimit-remaining: 0` or a rate limit message. `retryAt` comes from `retry-after` or `x-ratelimit-reset` when GitHub sends them. |
-| `NotFoundException` | 404, e.g. a repository deleted after it was listed |
-| `HttpStatusException` | Any other non-2xx status, including a 403 that isn't rate limiting |
-| `NetworkException` | No connection, a dropped connection, a TLS failure, or a timeout |
-| `MalformedResponseException` | A 2xx body that isn't JSON or lacks required fields |
+| Exception | When | Shown as |
+|---|---|---|
+| `RateLimitException` | 429, or 403 with `retry-after`, `x-ratelimit-remaining: 0` or a rate limit message. `retryAt` comes from `retry-after` or `x-ratelimit-reset` when GitHub sends them. | "Too many requests", with the time to try again in the device's 12- or 24-hour format, or "Wait a minute"; Retry |
+| `NotFoundException` | 404, e.g. a repository deleted after it was listed | "This repository no longer exists"; no Retry on the detail screen |
+| `HttpStatusException` | Any other non-2xx status, including a 403 that isn't rate limiting | "Something went wrong", with the status code; Retry |
+| `NetworkException` | No connection, a dropped connection, a TLS failure, or a timeout | "No connection"; Retry |
+| `MalformedResponseException` | A 2xx body that isn't JSON or lacks required fields | "Something went wrong"; Retry |
+
+`describeError` (`lib/ui/common/error_message.dart`) turns each exception into these texts, so every screen words errors the same way.
 
 Unauthenticated clients get [10 searches a minute](https://docs.github.com/en/rest/search/search#rate-limit) and [60 other requests an hour](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api#primary-rate-limit-for-unauthenticated-users) per IP address, so rate limiting is an expected state, not an edge case.
 
@@ -138,9 +274,10 @@ Tapping a search result opens `RepoDetailScreen` (`lib/ui/detail/`) within the t
 - **Back:** the back button, the iOS edge swipe and Android's system back close the shown tab's screens; system back on a tab's first screen is left to the system. Hidden tabs are never popped.
 - **Tapping the shown tab again** returns to its first screen, as in iOS apps.
 
+On the screen:
 
 - **Shown at once:** the owner avatar (96 pixels), `full_name` and the star button come from the search result, so they don't wait for the network.
-- **Copying the name:** long-pressing `full_name` copies the whole name and confirms with a SnackBar. It copies directly instead of selecting text, which would select only the word under the finger.
+- **Copying the name:** long-pressing `full_name` shows the platform's copy menu (the edit menu on iOS, the text toolbar on Android); Copy copies the whole name. The app uses a menu rather than selectable text, because selecting text would select only the word under the finger.
 - **Loaded:** `subscribers_count` comes from the Repository API through `repoDetailProvider` (`lib/state/repo_detail_provider.dart`), an `autoDispose` family keyed by full name, so reopening a repository loads its latest count. Like search, it never retries on its own: unauthenticated clients get 60 of these requests an hour.
 - **States of the subscriber count:** a loading indicator; the count with thousands separators; or the error with a Retry button. A deleted repository (404) says it no longer exists and offers no retry, since retrying can't bring it back. The rest of the screen, including the star, stays usable.
 - **Stars stay in sync:** the star button watches the same `isStarredProvider(id)` as the list rows, so starring here shows in the list on returning, without reloading anything.
@@ -205,7 +342,7 @@ Tests replace the platform store with `InMemorySharedPreferencesAsync` from [sha
 
 | State | Shows |
 |---|---|
-| Loading | A plain white background, the same as the native launch screen, with no spinner, so a fast load looks like the launch screen staying a moment longer. The app has no dark theme, so the Android launch screen stays white in dark mode too (`values-night/styles.xml`), as the iOS one already does. |
+| Loading | A plain background, the same as the native launch screen, with no spinner, so a fast load looks like the launch screen staying a moment longer. It is white in light mode and black in dark mode, like the iOS launch screen (`systemBackground`) and the Android launch themes (`values` and `values-night`); tests keep the three in sync. |
 | Failed | An error with a Retry button. Retry loads again; Riverpod's automatic retries are off, so a failing load doesn't keep the user waiting on a blank screen. |
 | Loaded | The app (`HomeShell`) |
 
@@ -218,7 +355,25 @@ Tests replace the platform store with `InMemorySharedPreferencesAsync` from [sha
   | iPhone SE simulator (iOS) | 15 ms | 38 ms | 51 ms |
   | Android emulator (`Medium_Phone`) | 47 ms | 89 ms | 198 ms |
 
-  The app's first screen still waits this long, but behind the same white background as the launch screen. Profile-mode measurements on real devices can follow with the performance work in [#11](https://github.com/ruby109/flutter_github_repo_viewer/issues/11).
+  The app's first screen still waits this long, but behind the same background as the launch screen (white, or black in dark mode). Profile-mode measurements on real devices can follow with the performance work in [#11](https://github.com/ruby109/flutter_github_repo_viewer/issues/11).
+
+## Dark Mode
+
+The app follows the system's light or dark mode; there is no in-app switch.
+
+- **Themes:** `AppTheme` (`lib/ui/app_theme.dart`) builds a light and a dark Material 3 theme from the same seed color, and `MyApp` passes both to `MaterialApp`. Widgets take their colors from the theme's color scheme. The only fixed colors are the star's amber, which reads well on both backgrounds, and the startup loading background, which is white or black on purpose to match the native launch screens.
+- **Launch:** the native launch screens and the startup loading background are white in light mode and black in dark mode (see [App Startup](#app-startup)), so nothing flashes on the way to the first screen.
+- **Goldens:** golden tests render with the app's own themes, and the main screens also have dark goldens.
+
+## Platform Conventions
+
+Material 3 throughout, with the platform's own behavior where users notice it:
+
+- **Navigation:** the back button shows the platform's arrow, iOS pages slide in from the right and close with the edge swipe, and Android's system back closes the shown tab's screens first. Tapping the shown tab again returns to its first screen.
+- **Tab bar:** a Material 3 `NavigationBar`, which marks the selected tab with an indicator behind its icon, so it is obvious even for the Search tab, whose icon doesn't change.
+- **Loading indicators** are adaptive: the iOS activity indicator on iOS, Material's on Android.
+- **Copy menu:** long-pressing a repository's name shows the platform's own menu (see [Detail Screen](#detail-screen)).
+- **App icon:** an amber star on the app's purple. `tool/generate_app_icon.py` (Python with Pillow) draws every iOS size and the Android icons, including an adaptive icon with a monochrome layer for themed icons.
 
 ## Development Setup
 
@@ -235,15 +390,28 @@ See [AGENTS.md](AGENTS.md) for exactly what each hook runs.
 
 ```sh
 flutter test --exclude-tags golden    # unit and widget tests
+dart analyze --fatal-infos            # analyzer, including riverpod_lint
 ```
 
-CI runs the same format, analyze and test checks on every push to `main` and on pull requests.
+- **Unit tests** cover the API client (requests, parsing, every error), the models, and every provider and notifier, including concurrent saves and pages arriving out of order.
+- **Widget tests** cover every screen and shared widget through its public API, and drive the whole `HomeShell` end to end: search, open a repository, star it, and see the star on every tab.
+- **Golden tests** render the key states of every screen (loading and loaded states are also checked by widget tests) at iPhone 17, iPhone SE, iPad and Android phone sizes, the main screens also in dark mode. Font rendering differs between operating systems, so they run only on Linux CI, for every pull request. After an intended UI change, push the branch and regenerate them there:
 
-Golden (snapshot) tests render key screens at iPhone 17, iPhone SE, iPad and Android phone sizes. They run on Linux CI for every pull request; to regenerate the golden files after an intended UI change, push the branch and run:
+  ```sh
+  scripts/update-goldens.sh
+  ```
 
-```sh
-scripts/update-goldens.sh
-```
+- **Real data, no network:** `test/fixtures/` holds real GitHub responses and avatars (refresh with `dart run tool/fetch_fixtures.dart`); `MockClient` and `withAvatarFixtures` serve them.
+
+CI runs format, analyze and the tests on every push to `main` and on pull requests.
+
+## Known Limitations
+
+- **Rate limits.** Without signing in, GitHub allows 10 searches a minute and 60 other requests an hour per IP address. The app makes few requests (search only on submit, 100 results a page, no automatic retries) and explains the limit when it is reached, but cannot raise it.
+- **1,000 results per search**, GitHub's limit; the list says so when it is reached.
+- **Stars are local** to the device, as the assignment asks; they are not synced with the user's GitHub stars.
+- **No undo** after unstarring in the Stars tab.
+- **Performance** has been checked in simulators and debug builds only; profile-mode measurements on devices are tracked in [#11](https://github.com/ruby109/flutter_github_repo_viewer/issues/11).
 
 ## Contributing
 

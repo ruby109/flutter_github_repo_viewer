@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -89,14 +90,16 @@ void main() {
     });
 
     group('long-pressing the name', () {
-      testWidgets('copies the full name', (tester) async {
-        String? copied;
+      /// Records what is copied to the clipboard during the test.
+      List<String?> watchClipboard(WidgetTester tester) {
+        final copied = <String?>[];
         tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
           SystemChannels.platform,
           (call) async {
             if (call.method == 'Clipboard.setData') {
-              copied =
-                  (call.arguments as Map<Object?, Object?>)['text'] as String?;
+              copied.add(
+                (call.arguments as Map<Object?, Object?>)['text'] as String?,
+              );
             }
             return null;
           },
@@ -107,17 +110,73 @@ void main() {
             null,
           ),
         );
+        return copied;
+      }
+
+      final copyButton = find.text('Copy');
+
+      testWidgets('shows a menu with Copy, copying nothing yet', (
+        tester,
+      ) async {
+        final copied = watchClipboard(tester);
         await pumpScreen(tester, () async => found());
         await tester.pump();
 
         await tester.longPress(find.text('flutter/flutter'));
-        await tester.pump();
+        await tester.pumpAndSettle();
 
-        expect(copied, 'flutter/flutter');
-        expect(find.text('Copied flutter/flutter'), findsOneWidget);
+        expect(copyButton, findsOneWidget);
+        expect(copied, isEmpty);
+        expect(find.byType(SnackBar), findsNothing);
       });
 
-      testWidgets('tells screen readers it can be copied', (tester) async {
+      testWidgets('Copy copies the full name and closes the menu', (
+        tester,
+      ) async {
+        final copied = watchClipboard(tester);
+        await pumpScreen(tester, () async => found());
+        await tester.pump();
+        await tester.longPress(find.text('flutter/flutter'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(copyButton);
+        await tester.pumpAndSettle();
+
+        expect(copied, ['flutter/flutter']);
+        expect(copyButton, findsNothing);
+      });
+
+      testWidgets('tapping elsewhere closes the menu without copying', (
+        tester,
+      ) async {
+        final copied = watchClipboard(tester);
+        await pumpScreen(tester, () async => found());
+        await tester.pump();
+        await tester.longPress(find.text('flutter/flutter'));
+        await tester.pumpAndSettle();
+
+        await tester.tapAt(const Offset(5, 400));
+        await tester.pumpAndSettle();
+
+        expect(copyButton, findsNothing);
+        expect(copied, isEmpty);
+      });
+
+      testWidgets(
+        "uses the platform's menu",
+        variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+        (tester) async {
+          await pumpScreen(tester, () async => found());
+          await tester.pump();
+
+          await tester.longPress(find.text('flutter/flutter'));
+          await tester.pumpAndSettle();
+
+          expect(find.byType(CupertinoTextSelectionToolbar), findsOneWidget);
+        },
+      );
+
+      testWidgets('tells screen readers it has a copy menu', (tester) async {
         final semantics = tester.ensureSemantics();
         await pumpScreen(tester, () async => found());
         await tester.pump();
@@ -127,7 +186,7 @@ void main() {
           matchesSemantics(
             label: 'flutter/flutter',
             hasLongPressAction: true,
-            onLongPressHint: 'Copy name',
+            onLongPressHint: 'Show copy menu',
           ),
         );
         semantics.dispose();
@@ -147,6 +206,20 @@ void main() {
       expect(find.text('3,546'), findsOneWidget);
       expect(find.text('Subscribers'), findsOneWidget);
     });
+
+    testWidgets(
+      "uses the platform's loading indicator",
+      variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+      (tester) async {
+        final response = Completer<http.Response>();
+        await pumpScreen(tester, () => response.future);
+
+        expect(find.byType(CupertinoActivityIndicator), findsOneWidget);
+
+        response.complete(found());
+        await tester.pump();
+      },
+    );
 
     testWidgets('keeps the card the same width once loaded', (tester) async {
       final response = Completer<http.Response>();
@@ -289,6 +362,8 @@ void main() {
             // button.
             child: MaterialApp(
               debugShowCheckedModeBanner: false,
+              theme: goldenTheme,
+              darkTheme: goldenDarkTheme,
               initialRoute: '/detail',
               routes: {
                 '/': (_) => const SizedBox.shrink(),
@@ -310,22 +385,27 @@ void main() {
       }
 
       for (final device in goldenDevices) {
-        testGoldens('loaded', device, (tester) async {
-          await withAvatarFixtures((_) async {
-            await pumpFixture(
-              tester,
-              () async => http.Response.bytes(
-                utf8.encode(jsonEncode(repoDetailFixture())),
-                200,
-                headers: {'content-type': 'application/json; charset=utf-8'},
-              ),
-            );
-            await tester.pump();
-            await loadImages(tester);
+        for (final brightness in Brightness.values) {
+          testGoldens('loaded', device, brightness: brightness, (tester) async {
+            await withAvatarFixtures((_) async {
+              await pumpFixture(
+                tester,
+                () async => http.Response.bytes(
+                  utf8.encode(jsonEncode(repoDetailFixture())),
+                  200,
+                  headers: {'content-type': 'application/json; charset=utf-8'},
+                ),
+              );
+              await tester.pump();
+              await loadImages(tester);
 
-            await expectGolden('loaded', device);
+              await expectGolden(
+                'loaded${goldenModeSuffix(brightness)}',
+                device,
+              );
+            });
           });
-        });
+        }
 
         testGoldens('loading', device, (tester) async {
           final response = Completer<http.Response>();

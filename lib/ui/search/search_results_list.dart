@@ -98,7 +98,7 @@ class _Footer extends StatelessWidget {
           ],
         ),
         SearchResults(hasMore: true) => const Center(
-          child: CircularProgressIndicator(),
+          child: CircularProgressIndicator.adaptive(),
         ),
         _ => Text(
           results.reachedSearchLimit
