@@ -32,12 +32,16 @@ class AvatarFixtures {
   /// Whether downloads fail as if there were no connection.
   var offline = false;
 
+  /// Whether downloads succeed with bytes that aren't an image.
+  var corrupt = false;
+
   final _directory = Directory.systemTemp.createTempSync('avatar_fixtures');
 
   late final cache = AvatarCache(
     MockClient((request) async {
       if (offline) throw http.ClientException('offline', request.url);
       requested.add(request.url);
+      if (corrupt) return http.Response.bytes([1, 2, 3], 200);
       final file = _fixtureFor(request.url);
       return file == null
           ? http.Response('', 404)

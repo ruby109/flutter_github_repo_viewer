@@ -1,5 +1,5 @@
+import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -9,8 +9,12 @@ import 'package:github_repo_viewer/data/avatars/avatar_cache.dart';
 
 void main() {
   group('AvatarCache', () {
-    final url = Uri.parse('https://avatars.githubusercontent.com/u/1?v=4&s=80');
-    final avatar = Uint8List.fromList([1, 2, 3]);
+    /// An owner's `avatar_url`, as the API returns it.
+    final url = Uri.parse('https://avatars.githubusercontent.com/u/1?v=4');
+
+    Uri sized(Uri avatar, int pixels) => avatar.replace(
+      queryParameters: {...avatar.queryParameters, 's': '$pixels'},
+    );
 
     late Directory directory;
     late List<Uri> requests;
@@ -22,7 +26,9 @@ void main() {
       now = DateTime(2026, 10, 1, 12);
     });
 
-    tearDown(() => directory.deleteSync(recursive: true));
+    tearDown(() {
+      if (directory.existsSync()) directory.deleteSync(recursive: true);
+    });
 
     /// A cache over [directory] whose downloads answer with [respond].
     AvatarCache cacheWith(
@@ -40,77 +46,127 @@ void main() {
       );
     }
 
-    Future<http.Response> found(http.Request _) async =>
-        http.Response.bytes(avatar, 200);
+    /// Answers with the requested size as text, so a test can tell which
+    /// size it got.
+    Future<http.Response> found(http.Request request) async => http.Response(
+      'size ${request.url.queryParameters['s'] ?? 'original'}',
+      200,
+    );
 
     Future<http.Response> offline(http.Request _) async =>
         throw http.ClientException('offline');
 
+    Future<String> load(AvatarCache cache, int pixels, {Uri? avatar}) async =>
+        utf8.decode(await cache.load(avatar ?? url, pixels: pixels));
+
     List<File> cachedFiles() => directory.listSync().whereType<File>().toList();
 
-    test('downloads an avatar it has not seen', () async {
+    test('downloads an avatar at the size asked for', () async {
       final cache = cacheWith(found);
 
-      expect(await cache.load(url), avatar);
-      expect(requests, [url]);
+      expect(await load(cache, 80), 'size 80');
+      expect(requests, [sized(url, 80)]);
+    });
+
+    // Only GitHub's avatar host is known to accept the size parameter.
+    test('downloads other images as they are', () async {
+      final cache = cacheWith(found);
+      final other = Uri.parse('https://example.com/a.png?v=4');
+
+      expect(await load(cache, 80, avatar: other), 'size original');
+      expect(await load(cache, 288, avatar: other), 'size original');
+      expect(requests, [other]);
     });
 
     test('reads an avatar it has seen from disk', () async {
       final cache = cacheWith(found);
-      await cache.load(url);
+      await load(cache, 80);
 
-      expect(await cache.load(url), avatar);
+      expect(await load(cache, 80), 'size 80');
       expect(requests, hasLength(1));
     });
 
     // A new cache over the same directory, as after an app restart.
     test('keeps avatars across restarts', () async {
-      await cacheWith(found).load(url);
+      await load(cacheWith(found), 80);
 
       final restarted = cacheWith(offline);
 
-      expect(await restarted.load(url), avatar);
+      expect(await load(restarted, 80), 'size 80');
       expect(requests, hasLength(1));
     });
 
-    test('stores different URLs separately', () async {
-      final cache = cacheWith(
-        (request) async =>
-            http.Response.bytes([request.url.pathSegments.last.length], 200),
-      );
+    test('keeps different avatars apart', () async {
+      final cache = cacheWith(found);
       final other = Uri.parse('https://avatars.githubusercontent.com/u/22?v=4');
 
-      final first = await cache.load(url);
-      final second = await cache.load(other);
+      await load(cache, 80);
+      await load(cache, 80, avatar: other);
 
-      expect(first, isNot(second));
       expect(cachedFiles(), hasLength(2));
+      expect(requests, [sized(url, 80), sized(other, 80)]);
+    });
+
+    group('with another size cached', () {
+      // The list shows 120 pixel avatars, the detail screen 288.
+      test('scales a larger one down instead of downloading', () async {
+        final cache = cacheWith(found);
+        await load(cache, 288);
+
+        expect(await load(cache, 120), 'size 288');
+        expect(requests, [sized(url, 288)]);
+      });
+
+      test('uses the closest larger one', () async {
+        final cache = cacheWith(found);
+        // 400 is larger than 288, so it is downloaded too.
+        await load(cache, 288);
+        await load(cache, 400);
+
+        expect(await load(cache, 120), 'size 288');
+      });
+
+      test(
+        'downloads the size asked for if only a smaller one is cached',
+        () async {
+          final cache = cacheWith(found);
+          await load(cache, 120);
+
+          expect(await load(cache, 288), 'size 288');
+          expect(requests, [sized(url, 120), sized(url, 288)]);
+        },
+      );
+
+      // Offline, a blurry avatar beats a placeholder.
+      test('falls back to a smaller one when offline', () async {
+        await load(cacheWith(found), 120);
+
+        expect(await load(cacheWith(offline), 288), 'size 120');
+      });
     });
 
     group('after the maximum age', () {
       Future<AvatarCache> cachedWeekAgo(
         Future<http.Response> Function(http.Request) respond,
       ) async {
-        await cacheWith(found).load(url);
+        await load(cacheWith(found), 80);
         now = now.add(AvatarCache.maxAge + const Duration(minutes: 1));
         return cacheWith(respond);
       }
 
       test('downloads the avatar again', () async {
-        final updated = Uint8List.fromList([9, 9]);
         final cache = await cachedWeekAgo(
-          (_) async => http.Response.bytes(updated, 200),
+          (_) async => http.Response('updated', 200),
         );
 
-        expect(await cache.load(url), updated);
+        expect(await load(cache, 80), 'updated');
         expect(requests, hasLength(2));
       });
 
-      // Offline, an old avatar beats a placeholder.
       test('keeps showing the old avatar if that fails', () async {
         final cache = await cachedWeekAgo(offline);
 
-        expect(await cache.load(url), avatar);
+        expect(await load(cache, 80), 'size 80');
       });
     });
 
@@ -118,21 +174,30 @@ void main() {
       test('throws and stores nothing when offline', () async {
         final cache = cacheWith(offline);
 
-        await expectLater(cache.load(url), throwsA(isA<Exception>()));
+        await expectLater(
+          cache.load(url, pixels: 80),
+          throwsA(isA<Exception>()),
+        );
         expect(cachedFiles(), isEmpty);
       });
 
       test('throws and stores nothing for a non-200 status', () async {
         final cache = cacheWith((_) async => http.Response('', 404));
 
-        await expectLater(cache.load(url), throwsA(isA<HttpException>()));
+        await expectLater(
+          cache.load(url, pixels: 80),
+          throwsA(isA<HttpException>()),
+        );
         expect(cachedFiles(), isEmpty);
       });
 
       test('throws and stores nothing for an empty body', () async {
         final cache = cacheWith((_) async => http.Response.bytes([], 200));
 
-        await expectLater(cache.load(url), throwsA(isA<HttpException>()));
+        await expectLater(
+          cache.load(url, pixels: 80),
+          throwsA(isA<HttpException>()),
+        );
         expect(cachedFiles(), isEmpty);
       });
     });
@@ -149,7 +214,7 @@ void main() {
           maxBytes: maxBytes,
         );
         for (var user = 1; user <= count; user++) {
-          await cache.load(avatarOf(user));
+          await cache.load(avatarOf(user), pixels: 80);
           now = now.add(const Duration(minutes: 1));
         }
         return cache;
@@ -157,7 +222,7 @@ void main() {
 
       Future<bool> isCached(AvatarCache cache, int user) async {
         requests.clear();
-        await cache.load(avatarOf(user));
+        await cache.load(avatarOf(user), pixels: 80);
         return requests.isEmpty;
       }
 
@@ -172,7 +237,7 @@ void main() {
         final cache = await filled(3, maxBytes: 1000);
         // Avatar 1 was seen again most recently, so avatar 2 is the least
         // recently used.
-        await cache.load(avatarOf(1));
+        await cache.load(avatarOf(1), pixels: 80);
         now = now.add(const Duration(minutes: 1));
 
         await cache.trim();
@@ -209,13 +274,55 @@ void main() {
         );
       });
 
+      // Two passes picking the same file to delete must not fail.
+      test('copes with passes running at the same time', () async {
+        final cache = await filled(3, maxBytes: 500);
+
+        await Future.wait([cache.trim(), cache.trim()]);
+
+        expect(cachedFiles(), hasLength(1));
+      });
+
+      test('copes with files removed by someone else', () async {
+        final cache = await filled(3, maxBytes: 500);
+        for (final file in cachedFiles()) {
+          file.deleteSync();
+        }
+
+        await cache.trim();
+
+        expect(await isCached(cache, 1), isFalse);
+      });
+
       test('does nothing before anything is cached', () async {
         directory.deleteSync(recursive: true);
 
         await cacheWith(found).trim();
-
-        directory.createSync();
       });
+    });
+
+    // The size load returned may be any cached one, so all of them go.
+    test('remove deletes every size of an avatar', () async {
+      final cache = cacheWith(found);
+      await load(cache, 120);
+      await load(cache, 288);
+
+      await cache.remove(url);
+
+      expect(cachedFiles(), isEmpty);
+      requests.clear();
+      expect(await load(cache, 120), 'size 120');
+      expect(requests, [sized(url, 120)]);
+    });
+
+    test('remove copes with files already gone', () async {
+      final cache = cacheWith(found);
+      await load(cache, 120);
+      for (final file in cachedFiles()) {
+        file.deleteSync();
+      }
+
+      await cache.remove(url);
     });
 
     // Reading an avatar marks it as used, but doesn't make it fresh.
@@ -223,12 +330,12 @@ void main() {
       'still refreshes an avatar seen often after the maximum age',
       () async {
         final cache = cacheWith(found);
-        await cache.load(url);
+        await load(cache, 80);
         now = now.add(AvatarCache.maxAge - const Duration(minutes: 1));
-        await cache.load(url);
+        await load(cache, 80);
         now = now.add(const Duration(minutes: 2));
 
-        await cache.load(url);
+        await load(cache, 80);
 
         expect(requests, hasLength(2));
       },

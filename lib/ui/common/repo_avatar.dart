@@ -22,8 +22,6 @@ class RepoAvatar extends ConsumerWidget {
 
   static const placeholderIcon = Icons.person;
 
-  static const _gitHubAvatarHost = 'avatars.githubusercontent.com';
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final placeholder = _Placeholder(size: size);
@@ -38,8 +36,9 @@ class RepoAvatar extends ConsumerWidget {
         child: Image(
           image: ResizeImage(
             CachedAvatarImage(
-              Uri.parse(_sized(url, pixels)),
-              ref.watch(avatarCacheProvider),
+              Uri.parse(url),
+              pixels: pixels,
+              cache: ref.watch(avatarCacheProvider),
             ),
             width: pixels,
             height: pixels,
@@ -53,15 +52,6 @@ class RepoAvatar extends ConsumerWidget {
         ),
       ),
     );
-  }
-
-  /// Asks GitHub's avatar host for an image [pixels] wide.
-  static String _sized(String url, int pixels) {
-    final uri = Uri.tryParse(url);
-    if (uri == null || uri.host != _gitHubAvatarHost) return url;
-    return uri
-        .replace(queryParameters: {...uri.queryParameters, 's': '$pixels'})
-        .toString();
   }
 }
 

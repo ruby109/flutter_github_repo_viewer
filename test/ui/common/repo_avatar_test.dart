@@ -15,14 +15,20 @@ void main() {
 
     setUp(() => avatars = AvatarFixtures());
 
-    Future<void> pumpAvatar(WidgetTester tester, String? url) {
+    Future<void> pumpAvatar(
+      WidgetTester tester,
+      String? url, {
+      double size = 40,
+    }) {
       return tester.pumpWidget(
         ProviderScope(
           overrides: [avatars.override],
           child: MaterialApp(
             home: MediaQuery(
               data: const MediaQueryData(devicePixelRatio: 2),
-              child: Center(child: RepoAvatar(url: url)),
+              child: Center(
+                child: RepoAvatar(url: url, size: size),
+              ),
             ),
           ),
         ),
@@ -74,6 +80,24 @@ void main() {
       expect(placeholder, findsNothing);
     });
 
+    // A 200 response that isn't an image must not stay cached.
+    testWidgets('downloads an avatar again after it failed to decode', (
+      tester,
+    ) async {
+      avatars.corrupt = true;
+      await pumpAvatar(tester, flutterAvatar);
+      await loadImages(tester);
+      expect(placeholder, findsOneWidget);
+
+      avatars.corrupt = false;
+      await tester.pumpWidget(const SizedBox());
+      await pumpAvatar(tester, flutterAvatar);
+      await loadImages(tester);
+
+      expect(placeholder, findsNothing);
+      expect(avatars.requested, hasLength(2));
+    });
+
     group('cached on disk', () {
       /// Loads [flutterAvatar] once, then forgets the decoded image, as
       /// after an app restart.
@@ -97,6 +121,19 @@ void main() {
 
         expect(placeholder, findsNothing);
         expect(avatars.requested, isEmpty);
+      });
+
+      // The list's small avatar stands in for the detail screen's large one.
+      testWidgets('shows a smaller size seen before while offline', (
+        tester,
+      ) async {
+        await seenBefore(tester);
+        avatars.offline = true;
+
+        await pumpAvatar(tester, flutterAvatar, size: 96);
+        await loadImages(tester);
+
+        expect(placeholder, findsNothing);
       });
 
       testWidgets('shows an avatar seen before while offline', (tester) async {
