@@ -7,7 +7,7 @@ A Flutter app for iOS and Android that searches GitHub repositories and keeps a 
 - **Search**: find public repositories through the GitHub REST API.
 - **Stars**: save repositories locally and browse them later, offline.
 
-**Contents:** [Screenshots](#screenshots) · [Getting Started](#getting-started) · [Key Implementation Points](#key-implementation-points) · [Packages](#packages) · [GitHub API](#github-api) · [Search](#search-screen) · [Detail](#detail-screen) · [Stars](#stars-screen) · [Favorites](#favorites) · [App Startup](#app-startup) · [Dark Mode](#dark-mode) · [Testing](#testing) · [Known Limitations](#known-limitations)
+**Contents:** [Screenshots](#screenshots) · [Getting Started](#getting-started) · [Key Implementation Points](#key-implementation-points) · [Packages](#packages) · [GitHub API](#github-api) · [Search](#search-screen) · [Detail](#detail-screen) · [Stars](#stars-screen) · [Favorites](#favorites) · [App Startup](#app-startup) · [Dark Mode](#dark-mode) · [Platform Conventions](#platform-conventions) · [Testing](#testing) · [Known Limitations](#known-limitations)
 
 ## Screenshots
 
@@ -364,6 +364,16 @@ The app follows the system's light or dark mode; there is no in-app switch.
 - **Themes:** `AppTheme` (`lib/ui/app_theme.dart`) builds a light and a dark Material 3 theme from the same seed color, and `MyApp` passes both to `MaterialApp`. Widgets take their colors from the theme's color scheme. The only fixed colors are the star's amber, which reads well on both backgrounds, and the startup loading background, which is white or black on purpose to match the native launch screens.
 - **Launch:** the native launch screens and the startup loading background are white in light mode and black in dark mode (see [App Startup](#app-startup)), so nothing flashes on the way to the first screen.
 - **Goldens:** golden tests render with the app's own themes, and the main screens also have dark goldens.
+
+## Platform Conventions
+
+Material 3 throughout, with the platform's own behavior where users notice it:
+
+- **Navigation:** the back button shows the platform's arrow, iOS pages slide in from the right and close with the edge swipe, and Android's system back closes the shown tab's screens first. Tapping the shown tab again returns to its first screen.
+- **Tab bar:** a Material 3 `NavigationBar`, which marks the selected tab with an indicator behind its icon, so it is obvious even for the Search tab, whose icon doesn't change.
+- **Loading indicators** are adaptive: the iOS activity indicator on iOS, Material's on Android.
+- **Copy menu:** long-pressing a repository's name shows the platform's own menu (see [Detail Screen](#detail-screen)).
+- **App icon:** an amber star on the app's purple. `tool/generate_app_icon.py` (Python with Pillow) draws every iOS size and the Android icons, including an adaptive icon with a monochrome layer for themed icons.
 
 ## Development Setup
 
