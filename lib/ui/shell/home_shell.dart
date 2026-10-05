@@ -38,16 +38,22 @@ class HomeShell extends HookWidget {
         index: currentTab.value.index,
         children: [
           for (final tab in AppTab.values)
-            // System back first closes the shown tab's screens; on its first
-            // screen it is left to the system (e.g. leaving the app).
-            NavigatorPopHandler<Object?>(
+            // IndexedStack keeps hidden tabs built; stop their animations
+            // (e.g. a loading indicator) so they don't schedule frames.
+            TickerMode(
               enabled: tab == currentTab.value,
-              onPopWithResult: (_) => navigators[tab]!.currentState!.maybePop(),
-              child: Navigator(
-                key: navigators[tab],
-                onGenerateInitialRoutes: (_, _) => [
-                  MaterialPageRoute<void>(builder: (_) => firstScreen(tab)),
-                ],
+              // System back first closes the shown tab's screens; on its
+              // first screen it is left to the system (e.g. leaving the app).
+              child: NavigatorPopHandler<Object?>(
+                enabled: tab == currentTab.value,
+                onPopWithResult: (_) =>
+                    navigators[tab]!.currentState!.maybePop(),
+                child: Navigator(
+                  key: navigators[tab],
+                  onGenerateInitialRoutes: (_, _) => [
+                    MaterialPageRoute<void>(builder: (_) => firstScreen(tab)),
+                  ],
+                ),
               ),
             ),
         ],
