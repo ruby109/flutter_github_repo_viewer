@@ -46,37 +46,37 @@ void main() {
       expect(find.byType(SearchScreen), findsOneWidget);
     });
 
-    group('opening a repository', () {
-      /// The shell over a GitHub API that finds `flutter/flutter` and
-      /// reports 3,546 subscribers for it.
-      Future<void> pumpWithApi(WidgetTester tester) async {
-        final preferences = await inMemoryPreferences();
-        await tester.pumpWidget(
-          ProviderScope(
-            overrides: [
-              sharedPreferencesProvider.overrideWithValue(preferences),
-              httpClientProvider.overrideWithValue(
-                MockClient((request) async {
-                  final repo = repoJson(id: 7, fullName: 'flutter/flutter');
-                  return http.Response(
-                    jsonEncode(
-                      request.url.path == '/search/repositories'
-                          ? searchJson(totalCount: 1, items: [repo])
-                          : (repo..['subscribers_count'] = 3546),
-                    ),
-                    200,
-                  );
-                }),
-              ),
-            ],
-            child: const MaterialApp(home: HomeShell()),
-          ),
-        );
-        await tester.enterText(find.byType(TextField), 'flutter');
-        await tester.testTextInput.receiveAction(TextInputAction.search);
-        await tester.pumpAndSettle();
-      }
+    /// The shell over a GitHub API that finds `flutter/flutter` and
+    /// reports 3,546 subscribers for it.
+    Future<void> pumpWithApi(WidgetTester tester) async {
+      final preferences = await inMemoryPreferences();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            sharedPreferencesProvider.overrideWithValue(preferences),
+            httpClientProvider.overrideWithValue(
+              MockClient((request) async {
+                final repo = repoJson(id: 7, fullName: 'flutter/flutter');
+                return http.Response(
+                  jsonEncode(
+                    request.url.path == '/search/repositories'
+                        ? searchJson(totalCount: 1, items: [repo])
+                        : (repo..['subscribers_count'] = 3546),
+                  ),
+                  200,
+                );
+              }),
+            ),
+          ],
+          child: const MaterialApp(home: HomeShell()),
+        ),
+      );
+      await tester.enterText(find.byType(TextField), 'flutter');
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pumpAndSettle();
+    }
 
+    group('opening a repository', () {
       testWidgets('opens it when a search result is tapped', (tester) async {
         await pumpWithApi(tester);
 
@@ -113,6 +113,85 @@ void main() {
           ),
           findsOneWidget,
         );
+      });
+    });
+
+    group('each tab keeps its own screens', () {
+      Future<void> openResult(WidgetTester tester) async {
+        await pumpWithApi(tester);
+        await tester.tap(find.text('flutter/flutter'));
+        await tester.pumpAndSettle();
+      }
+
+      Finder tabItem(AppTab tab) => find.descendant(
+        of: find.byType(BottomNavigationBar),
+        matching: find.text(tab.label),
+      );
+
+      final detail = find.byType(RepoDetailScreen);
+
+      testWidgets('keeps the navigation bar under the detail screen', (
+        tester,
+      ) async {
+        await openResult(tester);
+
+        expect(detail, findsOneWidget);
+        expect(find.byType(BottomNavigationBar).hitTestable(), findsOneWidget);
+      });
+
+      testWidgets('system back returns from the detail screen to the list', (
+        tester,
+      ) async {
+        await openResult(tester);
+
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+
+        expect(detail, findsNothing);
+        expect(find.text('flutter/flutter'), findsOneWidget);
+      });
+
+      // On the first screen of a tab, the system decides (e.g. leaves the
+      // app on Android).
+      testWidgets('leaves system back on a first screen to the system', (
+        tester,
+      ) async {
+        await pumpWithApi(tester);
+
+        final handled = await tester.binding.handlePopRoute();
+
+        expect(handled, isFalse);
+      });
+
+      testWidgets('system back leaves the screens of hidden tabs alone', (
+        tester,
+      ) async {
+        await openResult(tester);
+        await tester.tap(tabItem(AppTab.favorites));
+        await tester.pumpAndSettle();
+
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+        await tester.tap(tabItem(AppTab.search));
+        await tester.pumpAndSettle();
+
+        expect(detail.hitTestable(), findsOneWidget);
+      });
+
+      testWidgets('keeps the detail screen open while on another tab', (
+        tester,
+      ) async {
+        await openResult(tester);
+
+        await tester.tap(tabItem(AppTab.favorites));
+        await tester.pumpAndSettle();
+
+        expect(detail.hitTestable(), findsNothing);
+
+        await tester.tap(tabItem(AppTab.search));
+        await tester.pumpAndSettle();
+
+        expect(detail.hitTestable(), findsOneWidget);
       });
     });
 
