@@ -54,7 +54,14 @@ class HomeShell extends HookWidget {
       ),
       bottomNavigationBar: AppBottomNavigation(
         currentTab: currentTab.value,
-        onTabSelected: (tab) => currentTab.value = tab,
+        onTabSelected: (tab) {
+          // Tapping the shown tab again returns to its first screen, as on
+          // iOS.
+          if (tab == currentTab.value) {
+            navigators[tab]!.currentState!.popUntil((route) => route.isFirst);
+          }
+          currentTab.value = tab;
+        },
       ),
     );
   }

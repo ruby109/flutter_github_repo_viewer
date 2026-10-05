@@ -178,6 +178,18 @@ void main() {
         expect(detail.hitTestable(), findsOneWidget);
       });
 
+      testWidgets('tapping the current tab returns to its first screen', (
+        tester,
+      ) async {
+        await openResult(tester);
+
+        await tester.tap(tabItem(AppTab.search));
+        await tester.pumpAndSettle();
+
+        expect(detail, findsNothing);
+        expect(find.text('flutter/flutter'), findsOneWidget);
+      });
+
       testWidgets('keeps the detail screen open while on another tab', (
         tester,
       ) async {
