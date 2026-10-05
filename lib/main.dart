@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import 'ui/app_theme.dart';
 import 'ui/shell/home_shell.dart';
 import 'ui/startup/app_startup_widget.dart';
 
@@ -18,7 +19,9 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'GitHub Repo Viewer',
-      theme: ThemeData(colorScheme: .fromSeed(seedColor: Colors.deepPurple)),
+      // Follows the system's light or dark mode.
+      theme: AppTheme.light,
+      darkTheme: AppTheme.dark,
       // Inside MaterialApp, so the startup error uses the app's theme.
       home: const AppStartupWidget(child: HomeShell()),
     );

@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import 'package:github_repo_viewer/main.dart' as app;
 import 'package:github_repo_viewer/main.dart';
 import 'package:github_repo_viewer/state/favorites_notifier.dart';
+import 'package:github_repo_viewer/ui/app_theme.dart';
 import 'package:github_repo_viewer/ui/shell/home_shell.dart';
 import 'package:github_repo_viewer/ui/startup/app_startup_widget.dart';
 
@@ -70,6 +72,24 @@ void main() {
           matching: find.byType(HomeShell),
         ),
         findsOneWidget,
+      );
+    });
+
+    testWidgets('follows the system light or dark mode', (tester) async {
+      await inMemoryPreferences();
+      tester.platformDispatcher.platformBrightnessTestValue = Brightness.dark;
+      addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
+
+      await tester.pumpWidget(const ProviderScope(child: MyApp()));
+      await tester.pump();
+
+      final app = tester.widget<MaterialApp>(find.byType(MaterialApp));
+      expect(app.theme, AppTheme.light);
+      expect(app.darkTheme, AppTheme.dark);
+      expect(app.themeMode, ThemeMode.system);
+      expect(
+        Theme.of(tester.element(find.byType(HomeShell))).brightness,
+        Brightness.dark,
       );
     });
   });
