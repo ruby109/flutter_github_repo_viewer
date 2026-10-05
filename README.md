@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/ruby109/flutter_github_repo_viewer/actions/workflows/ci.yml/badge.svg)](https://github.com/ruby109/flutter_github_repo_viewer/actions/workflows/ci.yml)
 
-A Flutter app for iOS and Android that searches GitHub repositories and keeps a list of the ones you star.
+A Flutter app for iOS and Android that searches GitHub repositories and keeps a list of local favorites. Stars are saved on the device and do not change your GitHub account's stars.
 
 - **Search**: find public repositories through the GitHub REST API.
 - **Stars**: save repositories locally and browse them later, offline.
@@ -23,7 +23,7 @@ Rendered by the golden tests from real GitHub data, at iPhone 17 size.
 
 ## Requirements
 
-- Flutter 3.47 (stable channel) with Dart 3.13
+- Flutter 3.47.6 (stable channel), the version used by CI, with Dart 3.13.5. `pubspec.yaml` requires Dart `>=3.13.5 <4.0.0`.
 - Xcode for the iOS simulator, Android Studio (or the Android SDK) for the Android emulator
 
 ## Getting Started
@@ -36,12 +36,14 @@ flutter pub get && flutter run    # pick a simulator/emulator, or pass -d <devic
 
 No API key or configuration is needed: the app calls GitHub's public API without authentication.
 
-Release builds:
+Release-mode builds for local testing:
 
 ```sh
 flutter build apk --release              # Android, build/app/outputs/flutter-apk/app-release.apk
 flutter build ios --release --no-codesign  # iOS; sign and archive in Xcode to install on a device
 ```
+
+The Android release configuration currently uses the debug signing key. Store distribution requires your own application ID and release signing configuration; iOS distribution also requires signing and provisioning in Xcode.
 
 ## Key Implementation Points
 
@@ -109,7 +111,7 @@ flowchart LR
 | `sharedPreferencesProvider` | `Provider` | The loaded preferences, read synchronously everywhere after startup. |
 | `searchQueryProvider` | `NotifierProvider<String>` | The submitted search text; empty means the home state. |
 | `searchResultsProvider(query)` | `AsyncNotifierProvider`, `autoDispose` family, no automatic retry | One result set per keyword, so a new search never shows the previous one's results; also loads the next pages. |
-| `repoDetailProvider(fullName)` | `FutureProvider`, `autoDispose` family, no automatic retry | Fetched when a detail screen opens, dropped when it closes. |
+| `repoDetailProvider(fullName)` | `FutureProvider`, `autoDispose` family, no automatic retry | Shared by screens showing the same repository; disposed when no screen listens to it. |
 | `favoritesProvider` | `NotifierProvider<List<GitHubRepo>>` | The single owner of the starred list, and `toggle`. |
 | `starredIdsProvider`, `isStarredProvider(id)` | `Provider`, then an `autoDispose` family | One repository's star, so a star button rebuilds only when its own star changes. |
 
@@ -117,7 +119,7 @@ Riverpod retries failed providers by default. That is turned off for everything 
 
 ### How favorites stay in sync
 
-`favoritesProvider` is the only place stars live. The search list, the detail screen and the Stars tab all read it, and every star button changes it through `toggle(repo)`. The change shows on every screen at once, before it is saved; a failed save is reported in a SnackBar and the screens show what is actually stored. Details are in [Favorites](#favorites).
+`favoritesProvider` is the only place stars live. The search list, the detail screen and the Stars tab all read it, and every star button changes it through `toggle(repo)`. The change shows on every screen at once, before it is saved; a failed save is reported in a SnackBar, and the notifier attempts to restore the stored list. Details are in [Favorites](#favorites).
 
 ### Navigation
 
@@ -135,7 +137,7 @@ Riverpod retries failed providers by default. That is turned off for everything 
 | Repository deleted after it was listed (404) | The detail screen says it no longer exists, without a pointless Retry. |
 | Repository without an owner (`owner: null`) | A placeholder avatar. |
 | Stored favorites corrupt or from another version | Unreadable data loads as no favorites instead of crashing; valid entries are kept. |
-| A favorite fails to save | A SnackBar says so, and the screens show what is actually stored. |
+| A favorite fails to save | A SnackBar says so; the notifier reloads storage when possible (see [Failed saves](#corrupt-data-and-failed-saves)). |
 | Preferences fail to load at startup | An error screen with Retry instead of a launch screen that never goes away. |
 | Large accessibility text, long names, tablets | Text wraps instead of overflowing; content is width-limited on wide screens. |
 | Blank or whitespace-only search | The home state; no request is sent. |
@@ -278,7 +280,7 @@ On the screen:
 
 - **Shown at once:** the owner avatar (96 pixels), `full_name` and the star button come from the search result, so they don't wait for the network.
 - **Copying the name:** long-pressing `full_name` shows the platform's copy menu (the edit menu on iOS, the text toolbar on Android); Copy copies the whole name. The app uses a menu rather than selectable text, because selecting text would select only the word under the finger.
-- **Loaded:** `subscribers_count` comes from the Repository API through `repoDetailProvider` (`lib/state/repo_detail_provider.dart`), an `autoDispose` family keyed by full name, so reopening a repository loads its latest count. Like search, it never retries on its own: unauthenticated clients get 60 of these requests an hour.
+- **Loaded:** `subscribers_count` comes from the Repository API through `repoDetailProvider` (`lib/state/repo_detail_provider.dart`), an `autoDispose` family keyed by full name, so reopening a repository fetches its count again once no other screen is listening to that repository. A detail screen retained in the other tab can keep the same provider alive. Like search, it never retries on its own: unauthenticated clients get 60 of these requests an hour.
 - **States of the subscriber count:** a loading indicator; the count with thousands separators; or the error with a Retry button. A deleted repository (404) says it no longer exists and offers no retry, since retrying can't bring it back. The rest of the screen, including the star, stays usable.
 - **Stars stay in sync:** the star button watches the same `isStarredProvider(id)` as the list rows, so starring here shows in the list on returning, without reloading anything.
 - **Wide screens:** the content is at most 560 pixels wide, centered, so it stays readable on an iPad.
@@ -330,11 +332,11 @@ All favorites are stored under one key, `favorites`, as a JSON array of the fiel
 ### Corrupt data and failed saves
 
 - **Unreadable stored data** (not JSON, not an array, or the wrong type) loads as no favorites instead of crashing. Invalid entries and duplicate ids are skipped, and the valid entries are kept. The bad data is replaced on the next change.
-- **Failed saves.** If a save fails, `toggle` throws so the UI can tell the user. Once no other save is pending, the notifier reloads what is actually stored and shows that. It doesn't undo just the failed change, because a later save writes the whole list and may already contain it.
+- **Failed saves.** If a save fails, `toggle` throws so the UI can tell the user. The notifier attempts to reload storage and applies the stored list if no other save is pending. If reloading also fails, it keeps the current in-memory list; the next successful save persists that list. It doesn't undo just the failed change, because a later save writes the whole list and may already contain it.
 
 ### Testing favorites
 
-Tests replace the platform store with `InMemorySharedPreferencesAsync` from [shared_preferences_platform_interface](https://pub.dev/packages/shared_preferences_platform_interface). It is shared_preferences' own platform package and already a transitive dependency. It is listed as a dev dependency only so tests can import it, and it isn't part of the app. `test/helpers/preferences.dart` also has a store whose writes and reads a test can hold, fail or complete in any order, to cover concurrent saves.
+Tests replace the platform store with `InMemorySharedPreferencesAsync` from [shared_preferences_platform_interface](https://pub.dev/packages/shared_preferences_platform_interface). It is shared_preferences' own platform package, which the app already depends on through shared_preferences; it is also listed as a dev dependency only so tests can import its in-memory backend directly. `test/helpers/preferences.dart` also has a store whose writes and reads a test can hold, fail or complete in any order, to cover concurrent saves.
 
 ## App Startup
 
@@ -389,6 +391,7 @@ See [AGENTS.md](AGENTS.md) for exactly what each hook runs.
 ## Testing
 
 ```sh
+dart format --output=none --set-exit-if-changed .  # check formatting
 flutter test --exclude-tags golden    # unit and widget tests
 dart analyze --fatal-infos            # analyzer, including riverpod_lint
 ```
@@ -400,6 +403,8 @@ dart analyze --fatal-infos            # analyzer, including riverpod_lint
   ```sh
   scripts/update-goldens.sh
   ```
+
+  This requires the GitHub CLI (`gh`), authenticated with access to run workflows on this repository. Run it from the branch you pushed; it regenerates the images on Linux, commits them remotely and pulls that commit with `--ff-only`.
 
 - **Real data, no network:** `test/fixtures/` holds real GitHub responses and avatars (refresh with `dart run tool/fetch_fixtures.dart`); `MockClient` and `withAvatarFixtures` serve them.
 
